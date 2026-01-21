@@ -64,26 +64,26 @@
     - verify: `node -e "import('./src/operation-detector.js').then(m => console.log(m.parseToolName('github_delete_repo')))"`
   - [x] 2.5 Verify: Test operation detection with sample tool names - github_list_repos→read, github_delete_repo→delete, github_create_issue→write
 
-- [ ] 3.0 GovernedMCPServer Core Implementation
-  - [ ] 3.1 Create src/index.js with GovernedMCPServer class constructor accepting config and rules
+- [x] 3.0 GovernedMCPServer Core Implementation
+  - [x] 3.1 Create src/index.js with GovernedMCPServer class constructor accepting config and rules
     - tdd: no
     - verify: `node -e "import('./src/index.js').then(m => console.log(typeof m.GovernedMCPServer))"`
-  - [ ] 3.2 Implement checkPermission(toolName) method that uses operation-detector to determine if operation is allowed
+  - [x] 3.2 Implement checkPermission(toolName) method that uses operation-detector to determine if operation is allowed
     - tdd: no
     - verify: `node -e "import('./src/index.js').then(m => { const s = new m.GovernedMCPServer({name:'test',version:'1.0'}, {github:{delete:'deny'}}); console.log(s.checkPermission('github_delete_repo')); })"`
-  - [ ] 3.3 Implement logOperation(tool, args, status, detail) method for structured JSON logging to console.error
+  - [x] 3.3 Implement logOperation(tool, args, status, detail) method for structured JSON logging to console.error
     - tdd: no
     - verify: `node -e "import('./src/index.js').then(m => { const s = new m.GovernedMCPServer({name:'test',version:'1.0'}, {}); s.logOperation('test','{}','success'); })"`
-  - [ ] 3.4 Implement registerTool(toolDef, handler) that wraps handler with permission check before execution
+  - [x] 3.4 Implement registerTool(toolDef, handler) that wraps handler with permission check before execution
     - tdd: no
     - verify: `node -e "import('./src/index.js').then(m => { const s = new m.GovernedMCPServer({name:'test',version:'1.0'}, {}); s.registerTool({name:'test_get',description:'test',inputSchema:{}}, async()=>({content:[{type:'text',text:'ok'}]})); console.log('registered'); })"`
-  - [ ] 3.5 Implement start() method to initialize MCP stdio transport and connect server
+  - [x] 3.5 Implement start() method to initialize MCP stdio transport and connect server
     - tdd: no
     - verify: Manual verification via example server
-  - [ ] 3.6 Add error handling for permission denials - return MCP-compliant error with helpful message
+  - [x] 3.6 Add error handling for permission denials - return MCP-compliant error with helpful message
     - tdd: no
     - verify: Check error response format matches MCP spec
-  - [ ] 3.7 Verify: Create simple test in node REPL - GovernedMCPServer blocks denied operations and logs all attempts
+  - [x] 3.7 Verify: Create simple test in node REPL - GovernedMCPServer blocks denied operations and logs all attempts
 
 - [ ] 4.0 GitHub Example Implementation
   - [ ] 4.1 Create examples/github/.env.example with GITHUB_TOKEN placeholder and instructions
