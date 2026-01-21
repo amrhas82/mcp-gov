@@ -1,0 +1,23 @@
+{
+  "name": "mcp-gov",
+  "version": "1.0.0",
+  "description": "MCP Governance System - Permission control and audit logging for Model Context Protocol servers",
+  "type": "module",
+  "main": "src/index.js",
+  "scripts": {
+    "example:github": "node examples/github/server.js"
+  },
+  "keywords": [
+    "mcp",
+    "governance",
+    "permissions",
+    "audit"
+  ],
+  "author": "",
+  "license": "MIT",
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^0.5.0",
+    "axios": "^1.6.0",
+    "dotenv": "^16.0.0"
+  }
+}
