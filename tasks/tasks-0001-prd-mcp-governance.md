@@ -49,20 +49,20 @@
     - verify: `npm list --depth=0 | grep -E "modelcontextprotocol|axios|dotenv"`
   - [x] 1.5 Verify: `node --version && npm list --depth=0` - Node 20+ and dependencies installed
 
-- [ ] 2.0 Operation Detection System
-  - [ ] 2.1 Create src/operation-keywords.js with exhaustive keyword mappings for all 5 operation types (~160 keywords)
+- [x] 2.0 Operation Detection System
+  - [x] 2.1 Create src/operation-keywords.js with exhaustive keyword mappings for all 5 operation types (~160 keywords)
     - tdd: no
     - verify: `node -e "import('./src/operation-keywords.js').then(m => console.log(Object.keys(m.OPERATION_KEYWORDS)))"`
-  - [ ] 2.2 Create src/operation-detector.js with detectOperation(toolName) function using priority-based matching
+  - [x] 2.2 Create src/operation-detector.js with detectOperation(toolName) function using priority-based matching
     - tdd: no
     - verify: `node -e "import('./src/operation-detector.js').then(m => console.log(m.detectOperation('github_list_repos')))"`
-  - [ ] 2.3 Add extractService(toolName) function to operation-detector.js (extracts service name from tool name prefix)
+  - [x] 2.3 Add extractService(toolName) function to operation-detector.js (extracts service name from tool name prefix)
     - tdd: no
     - verify: `node -e "import('./src/operation-detector.js').then(m => console.log(m.extractService('github_delete_repo')))"`
-  - [ ] 2.4 Add parseToolName(toolName) function that returns {service, operation}
+  - [x] 2.4 Add parseToolName(toolName) function that returns {service, operation}
     - tdd: no
     - verify: `node -e "import('./src/operation-detector.js').then(m => console.log(m.parseToolName('github_delete_repo')))"`
-  - [ ] 2.5 Verify: Test operation detection with sample tool names - github_list_repos→read, github_delete_repo→delete, github_create_issue→write
+  - [x] 2.5 Verify: Test operation detection with sample tool names - github_list_repos→read, github_delete_repo→delete, github_create_issue→write
 
 - [ ] 3.0 GovernedMCPServer Core Implementation
   - [ ] 3.1 Create src/index.js with GovernedMCPServer class constructor accepting config and rules
