@@ -1,0 +1,9 @@
+{
+  "github": {
+    "read": "allow",
+    "write": "allow",
+    "delete": "deny",
+    "execute": "allow",
+    "admin": "deny"
+  }
+}

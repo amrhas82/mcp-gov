@@ -85,26 +85,26 @@
     - verify: Check error response format matches MCP spec
   - [x] 3.7 Verify: Create simple test in node REPL - GovernedMCPServer blocks denied operations and logs all attempts
 
-- [ ] 4.0 GitHub Example Implementation
-  - [ ] 4.1 Create examples/github/.env.example with GITHUB_TOKEN placeholder and instructions
+- [x] 4.0 GitHub Example Implementation
+  - [x] 4.1 Create examples/github/.env.example with GITHUB_TOKEN placeholder and instructions
     - tdd: no
     - verify: `cat /home/hamr/PycharmProjects/mcp-gov/examples/github/.env.example`
-  - [ ] 4.2 Create examples/github/rules.json with github: {read: "allow", write: "allow", delete: "deny", admin: "deny"}
+  - [x] 4.2 Create examples/github/rules.json with github: {read: "allow", write: "allow", delete: "deny", admin: "deny"}
     - tdd: no
     - verify: `cat /home/hamr/PycharmProjects/mcp-gov/examples/github/rules.json | jq .`
-  - [ ] 4.3 Implement github_list_repos tool - GET /user/repos, returns list of user's repositories
+  - [x] 4.3 Implement github_list_repos tool - GET /user/repos, returns list of user's repositories
     - tdd: no
     - verify: Manual test with valid GitHub token
-  - [ ] 4.4 Implement github_delete_repo tool - DELETE /repos/{owner}/{repo}, requires repo_name parameter
+  - [x] 4.4 Implement github_delete_repo tool - DELETE /repos/{owner}/{repo}, requires repo_name parameter
     - tdd: no
     - verify: Manual test (should be blocked by rules)
-  - [ ] 4.5 Wire up GovernedMCPServer with both tools and rules in examples/github/server.js
+  - [x] 4.5 Wire up GovernedMCPServer with both tools and rules in examples/github/server.js
     - tdd: no
     - verify: `node /home/hamr/PycharmProjects/mcp-gov/examples/github/server.js` (check it starts)
-  - [ ] 4.6 Add dotenv config loading and error handling for missing GITHUB_TOKEN
+  - [x] 4.6 Add dotenv config loading and error handling for missing GITHUB_TOKEN
     - tdd: no
     - verify: `node examples/github/server.js` without .env shows helpful error
-  - [ ] 4.7 Verify: Server starts without errors, shows "MCP Server started" message, ready for stdio connections
+  - [x] 4.7 Verify: Server starts without errors, shows "MCP Server started" message, ready for stdio connections
 
 - [ ] 5.0 End-to-End Testing with Claude Desktop
   - [ ] 5.1 Create Claude Desktop MCP configuration file entry for github-governed server
