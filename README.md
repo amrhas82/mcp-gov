@@ -1,76 +1,194 @@
-# mcp-governance
+# MCP Governance System
 
-Add permission controls and audit logging to your MCP servers.
+A permission control and audit logging system for Model Context Protocol (MCP) servers. Provides fine-grained governance over tool operations with automatic detection and structured audit logs.
 
-## Overview
+## Features
 
-A lightweight JavaScript library that wraps MCP (Model Context Protocol) servers to add governance features:
+- **Permission Control**: Fine-grained rules for read, write, delete, execute, and admin operations
+- **Operation Detection**: Automatic classification of 160+ keywords across 5 operation types
+- **Audit Logging**: Structured JSON logs to stderr with timestamps, tool names, and status
+- **MCP-Compliant**: Works seamlessly with any MCP client (Claude Desktop, etc.)
+- **Middleware Pattern**: Wraps existing MCP servers without modifying tool logic
 
-- **Permission Controls** - Block specific operations (read/write/delete)
-- **Audit Logging** - Track what AI agents actually do
-- **Clean API** - Add governance in ~5 lines of code
+## Installation
 
-## Status
+```bash
+# Clone the repository
+git clone https://github.com/yourusername/mcp-gov.git
+cd mcp-gov
 
-🚧 **In Development** - POC Phase
+# Install dependencies
+npm install
+```
 
-See [PRD](./tasks/0001-prd-mcp-governance.md) for detailed requirements.
+## Quick Start
 
-## Quick Example
+### 1. Create a governed server
 
 ```javascript
-import { GovernedMCPServer } from 'mcp-governance';
+import { GovernedMCPServer } from './src/index.js';
 
+// Define permission rules
+const rules = {
+  github: {
+    read: 'allow',
+    write: 'allow',
+    delete: 'deny',   // Block destructive operations
+    admin: 'deny'
+  }
+};
+
+// Create server
 const server = new GovernedMCPServer(
   { name: 'my-server', version: '1.0.0' },
+  rules
+);
+
+// Register tools
+server.registerTool(
   {
-    gmail: {
-      read: 'allow',    // Can read emails
-      write: 'allow',   // Can compose drafts
-      execute: 'deny',  // Cannot send emails
-      delete: 'deny',   // Cannot delete emails
-      admin: 'deny'     // Cannot change settings
-    }
+    name: 'github_list_repos',
+    description: 'List repositories',
+    inputSchema: { type: 'object', properties: {} }
+  },
+  async (args) => {
+    // Your tool logic here
+    return {
+      content: [{ type: 'text', text: 'Repositories listed' }]
+    };
   }
 );
 
-// Register your tools as normal
-server.registerTool(toolDef, handler);
+// Start server
 await server.start();
 ```
 
-## Permission Levels
+### 2. Run the GitHub example
 
-Control AI access with 5 granular permission levels:
+```bash
+# Set up environment
+cd examples/github
+cp .env.example .env
+# Edit .env and add your GitHub token
 
-- **read** - View-only access (safest)
-- **write** - Create/update data (no delete)
-- **execute** - Run operations, send emails, trigger actions
-- **delete** - Remove data (dangerous)
-- **admin** - Full control over settings (most dangerous)
+# Run the server
+node server.js
+```
 
-See [Permission Levels Guide](./docs/permission-levels.md) for detailed examples.
+### 3. Configure Claude Desktop
 
-## Why?
+Add to `~/.config/Claude/claude_desktop_config.json`:
 
-MCP servers give AI agents powerful access to your tools. This library lets you:
-- Make services read-only
-- Block dangerous operations (delete, admin)
-- Separate "compose email" from "send email" (write vs execute)
-- Log everything for audit trails
-- Enforce policies before allowing operations
+```json
+{
+  "mcpServers": {
+    "github-governed": {
+      "command": "node",
+      "args": ["/path/to/mcp-gov/examples/github/server.js"],
+      "env": {
+        "GITHUB_TOKEN": "your_token_here"
+      }
+    }
+  }
+}
+```
 
-## Stack
+## Operation Detection
 
-- Pure JavaScript (ESM)
-- Node.js 20+
-- Minimal dependencies (@modelcontextprotocol/sdk, axios)
-- No build steps
+The system automatically classifies tools based on keywords in their names:
 
-## Contributing
+| Operation | Keywords | Default Policy |
+|-----------|----------|----------------|
+| **admin** | admin, superuser, configure, migrate, deploy | Conservative |
+| **delete** | delete, remove, destroy, purge, erase | Conservative |
+| **execute** | execute, run, invoke, trigger, send | Conservative |
+| **write** | create, add, update, modify, edit, write | Moderate |
+| **read** | get, list, fetch, query, search, view | Permissive |
 
-This is an open-source project. PRs welcome!
+Priority order: admin → delete → execute → write → read
+
+## Permission Rules
+
+Rules are defined per service and operation:
+
+```json
+{
+  "serviceName": {
+    "read": "allow",
+    "write": "allow",
+    "delete": "deny",
+    "execute": "allow",
+    "admin": "deny"
+  }
+}
+```
+
+- Default policy: `allow` (if no rule exists)
+- Missing operations inherit default
+- Service name extracted from tool name prefix (e.g., `github_list` → `github`)
+
+## Audit Logs
+
+All operations are logged to stderr as JSON:
+
+```json
+{
+  "timestamp": "2026-01-21T10:00:00.000Z",
+  "tool": "github_delete_repo",
+  "args": "{\"repo_name\":\"test-repo\"}",
+  "status": "denied",
+  "detail": "Permission denied by governance rules"
+}
+```
+
+Status values: `allowed`, `denied`, `success`, `error`
+
+## Architecture
+
+```
+┌─────────────────┐
+│  MCP Client     │ (Claude Desktop)
+└────────┬────────┘
+         │ MCP Protocol (stdio)
+         ▼
+┌─────────────────┐
+│ GovernedMCP     │ 1. Check permission
+│ Server          │ 2. Log operation
+│                 │ 3. Execute handler
+└────────┬────────┘
+         │
+         ▼
+┌─────────────────┐
+│ Tool Handlers   │ (GitHub API, etc.)
+└─────────────────┘
+```
+
+## Examples
+
+See `examples/github/` for a complete working example with:
+
+- GitHub API integration (list repos, delete repo)
+- Permission rules configuration
+- Environment variable management
+- Claude Desktop integration
+
+## Development
+
+```bash
+# Test operation detection
+node -e "import('./src/operation-detector.js').then(m => console.log(m.detectOperation('github_list_repos')))"
+
+# Test permission checking
+node -e "import('./src/index.js').then(m => {
+  const s = new m.GovernedMCPServer({name:'test',version:'1.0'}, {github:{delete:'deny'}});
+  console.log(s.checkPermission('github_delete_repo'));
+})"
+```
 
 ## License
 
 MIT
+
+## Contributing
+
+Contributions welcome! Please open an issue or PR.

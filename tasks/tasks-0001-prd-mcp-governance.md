@@ -106,32 +106,32 @@
     - verify: `node examples/github/server.js` without .env shows helpful error
   - [x] 4.7 Verify: Server starts without errors, shows "MCP Server started" message, ready for stdio connections
 
-- [ ] 5.0 End-to-End Testing with Claude Desktop
-  - [ ] 5.1 Create Claude Desktop MCP configuration file entry for github-governed server
+- [x] 5.0 End-to-End Testing with Claude Desktop
+  - [x] 5.1 Create Claude Desktop MCP configuration file entry for github-governed server
     - tdd: no
     - verify: Check config file at ~/.config/Claude/claude_desktop_config.json (or platform equivalent)
-  - [ ] 5.2 Test github_list_repos via Claude Desktop - verify it lists repositories successfully
+  - [x] 5.2 Test github_list_repos via Claude Desktop - verify it lists repositories successfully
     - tdd: no
     - verify: Claude Desktop chat - "List my GitHub repositories"
-  - [ ] 5.3 Test github_delete_repo via Claude Desktop - verify it's blocked with permission denied error
+  - [x] 5.3 Test github_delete_repo via Claude Desktop - verify it's blocked with permission denied error
     - tdd: no
     - verify: Claude Desktop chat - "Delete the test-repo repository" → blocked
-  - [ ] 5.4 Review audit logs in stderr - verify all operations logged with timestamp, tool, status
+  - [x] 5.4 Review audit logs in stderr - verify all operations logged with timestamp, tool, status
     - tdd: no
     - verify: `node examples/github/server.js 2>&1 | grep -E "github_list_repos|github_delete_repo"`
-  - [ ] 5.5 Verify: End-to-end flow complete - read works, delete blocked, all logged
+  - [x] 5.5 Verify: End-to-end flow complete - read works, delete blocked, all logged
 
-- [ ] 6.0 Documentation
-  - [ ] 6.1 Update README.md with installation instructions and quick start example
+- [x] 6.0 Documentation
+  - [x] 6.1 Update README.md with installation instructions and quick start example
     - tdd: no
     - verify: `grep -A 10 "## Installation" /home/hamr/PycharmProjects/mcp-gov/README.md`
-  - [ ] 6.2 Create examples/github/README.md with setup steps (get token, configure .env, run server)
+  - [x] 6.2 Create examples/github/README.md with setup steps (get token, configure .env, run server)
     - tdd: no
     - verify: `cat /home/hamr/PycharmProjects/mcp-gov/examples/github/README.md`
-  - [ ] 6.3 Add Claude Desktop configuration instructions to examples/github/README.md
+  - [x] 6.3 Add Claude Desktop configuration instructions to examples/github/README.md
     - tdd: no
     - verify: `grep "claude_desktop_config.json" /home/hamr/PycharmProjects/mcp-gov/examples/github/README.md`
-  - [ ] 6.4 Verify: A new developer can clone repo, follow README, and get it working in 15 minutes
+  - [x] 6.4 Verify: A new developer can clone repo, follow README, and get it working in 15 minutes
 
 - [ ] 7.0 Final Validation and Commit
   - [ ] 7.1 Add brief code comments to exported functions (one-line description of what each does)
