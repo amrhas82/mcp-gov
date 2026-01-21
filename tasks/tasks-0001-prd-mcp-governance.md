@@ -1,20 +1,19 @@
 ## Relevant Files
 
-- `/home/hamr/PycharmProjects/mcp-gov/package.json` - Project metadata, dependencies (@modelcontextprotocol/sdk, axios), ESM module configuration
+- `/home/hamr/PycharmProjects/mcp-gov/package.json` - Project metadata, dependencies (@modelcontextprotocol/sdk, axios, dotenv), ESM module configuration
 - `/home/hamr/PycharmProjects/mcp-gov/.gitignore` - Git ignore patterns for node_modules, .env, logs
 - `/home/hamr/PycharmProjects/mcp-gov/src/operation-keywords.js` - Exhaustive keyword mapping constants (~160 keywords across 5 operation types)
 - `/home/hamr/PycharmProjects/mcp-gov/src/operation-detector.js` - Operation detection logic, service name extraction, tool name parsing (~100 lines)
 - `/home/hamr/PycharmProjects/mcp-gov/src/index.js` - Main GovernedMCPServer class, permission enforcement, audit logging (~150 lines)
 - `/home/hamr/PycharmProjects/mcp-gov/examples/github/server.js` - Working GitHub MCP server implementation with governance (~50 lines)
 - `/home/hamr/PycharmProjects/mcp-gov/examples/github/rules.json` - Example permission rules (read: allow, write: allow, delete: deny)
-- `/home/hamr/PycharmProjects/mcp-gov/examples/github/.env.example` - API key template for GitHub
+- `/home/hamr/PycharmProjects/mcp-gov/examples/github/.env.example` - Token template for GitHub
 - `/home/hamr/PycharmProjects/mcp-gov/examples/github/README.md` - How to run the GitHub example, Claude Desktop integration instructions
-- `/home/hamr/PycharmProjects/mcp-gov/README.md` - Project overview, quick start, installation (update with API documentation)
-- `/home/hamr/PycharmProjects/mcp-gov/.npmignore` - NPM publish ignore rules (future)
+- `/home/hamr/PycharmProjects/mcp-gov/README.md` - Project overview, quick start, installation
 
 ### Notes
 
-**Testing Framework:** Manual testing via console logs and Claude Desktop integration for POC. No automated test framework initially.
+**Testing Framework:** Manual testing via console logs and Claude Desktop integration for POC. No automated test framework.
 
 **Module System:** Pure ES Modules (import/export). Use `"type": "module"` in package.json. No build tools or transpilation.
 
@@ -24,20 +23,21 @@
 
 **Audit Logging:** Output to console.error (stderr) as JSON for structured parsing. Each log entry includes timestamp, tool name, truncated args (200 chars), status (allowed/denied/success/error), and optional detail message.
 
-**Permission Rules Default:** When no rule exists for a service/operation, default to 'allow' (permissive for POC). Can be made configurable post-POC.
+**Permission Rules Default:** When no rule exists for a service/operation, default to 'allow' (permissive for POC).
 
-**Error Messages:** Must be MCP-compliant error responses with clear messages including suggestions for fixing rules.
-
-**TDD Approach:** For core library components (operation-detector.js, index.js), write tests first to ensure behavior correctness. For example server, implement directly and verify manually.
+**GitHub API Details:**
+- List repos: `GET https://api.github.com/user/repos` with header `Authorization: Bearer {token}`
+- Delete repo: `DELETE https://api.github.com/repos/{owner}/{repo}`
+- Get authenticated user: `GET https://api.github.com/user` (for owner name)
 
 ---
 
 ## Tasks
 
 - [ ] 1.0 Project Setup and Configuration
-  - [ ] 1.1 Create package.json with ESM configuration, dependencies (@modelcontextprotocol/sdk, axios), and scripts
+  - [ ] 1.1 Create package.json with ESM configuration, dependencies (@modelcontextprotocol/sdk@^0.5.0, axios@^1.6.0, dotenv@^16.0.0)
     - tdd: no
-    - verify: `node --version && cat /home/hamr/PycharmProjects/mcp-gov/package.json`
+    - verify: `cat /home/hamr/PycharmProjects/mcp-gov/package.json | grep -E "modelcontextprotocol|axios|dotenv"`
   - [ ] 1.2 Create .gitignore file with node_modules, .env, logs, .DS_Store patterns
     - tdd: no
     - verify: `cat /home/hamr/PycharmProjects/mcp-gov/.gitignore`
@@ -46,125 +46,101 @@
     - verify: `ls -la /home/hamr/PycharmProjects/mcp-gov/src/ && ls -la /home/hamr/PycharmProjects/mcp-gov/examples/github/`
   - [ ] 1.4 Install dependencies via npm
     - tdd: no
-    - verify: `npm list --depth=0`
+    - verify: `npm list --depth=0 | grep -E "modelcontextprotocol|axios|dotenv"`
   - [ ] 1.5 Verify: `node --version && npm list --depth=0` - Node 20+ and dependencies installed
 
 - [ ] 2.0 Operation Detection System
-  - [ ] 2.1 Create src/operation-keywords.js with exhaustive keyword mappings for all 5 operation types
-    - tdd: yes
+  - [ ] 2.1 Create src/operation-keywords.js with exhaustive keyword mappings for all 5 operation types (~160 keywords)
+    - tdd: no
     - verify: `node -e "import('./src/operation-keywords.js').then(m => console.log(Object.keys(m.OPERATION_KEYWORDS)))"`
-  - [ ] 2.2 Implement detectOperation(toolName) function in src/operation-detector.js with priority-based matching
-    - tdd: yes
+  - [ ] 2.2 Create src/operation-detector.js with detectOperation(toolName) function using priority-based matching
+    - tdd: no
     - verify: `node -e "import('./src/operation-detector.js').then(m => console.log(m.detectOperation('github_list_repos')))"`
-  - [ ] 2.3 Implement parseToolName(toolName) function to extract service name and operation verb
-    - tdd: yes
+  - [ ] 2.3 Add extractService(toolName) function to operation-detector.js (extracts service name from tool name prefix)
+    - tdd: no
+    - verify: `node -e "import('./src/operation-detector.js').then(m => console.log(m.extractService('github_delete_repo')))"`
+  - [ ] 2.4 Add parseToolName(toolName) function that returns {service, operation}
+    - tdd: no
     - verify: `node -e "import('./src/operation-detector.js').then(m => console.log(m.parseToolName('github_delete_repo')))"`
-  - [ ] 2.4 Write manual test cases for operation detection (20+ tool names covering all operation types)
-    - tdd: yes
-    - verify: `node /home/hamr/PycharmProjects/mcp-gov/src/operation-detector-test.js`
-  - [ ] 2.5 Verify: `node src/operation-detector-test.js` - All test cases pass with correct operation type detection
+  - [ ] 2.5 Verify: Test operation detection with sample tool names - github_list_repos→read, github_delete_repo→delete, github_create_issue→write
 
 - [ ] 3.0 GovernedMCPServer Core Implementation
   - [ ] 3.1 Create src/index.js with GovernedMCPServer class constructor accepting config and rules
-    - tdd: yes
+    - tdd: no
     - verify: `node -e "import('./src/index.js').then(m => console.log(typeof m.GovernedMCPServer))"`
-  - [ ] 3.2 Implement checkPermission(toolName, rules) method for permission rule lookup
-    - tdd: yes
-    - verify: `node -e "import('./src/index.js').then(m => { const s = new m.GovernedMCPServer({name:'test',version:'1.0'}, {github:{delete:'deny'}}); console.log(s.checkPermission('github_delete_repo', s.rules)); })"`
-  - [ ] 3.3 Implement logAudit(entry) method for structured JSON logging to console.error
-    - tdd: yes
-    - verify: `node -e "import('./src/index.js').then(m => { const s = new m.GovernedMCPServer({name:'test',version:'1.0'}, {}); s.logAudit({tool:'test',status:'success'}); })"`
-  - [ ] 3.4 Implement registerTool(toolDef, handler) method with permission wrapping logic
-    - tdd: yes
-    - verify: `node -e "import('./src/index.js').then(m => { const s = new m.GovernedMCPServer({name:'test',version:'1.0'}, {}); s.registerTool({name:'test_get'}, async()=>({content:[{type:'text',text:'ok'}]})); console.log('registered'); })"`
-  - [ ] 3.5 Implement start() method to initialize MCP stdio transport
+  - [ ] 3.2 Implement checkPermission(toolName) method that uses operation-detector to determine if operation is allowed
+    - tdd: no
+    - verify: `node -e "import('./src/index.js').then(m => { const s = new m.GovernedMCPServer({name:'test',version:'1.0'}, {github:{delete:'deny'}}); console.log(s.checkPermission('github_delete_repo')); })"`
+  - [ ] 3.3 Implement logOperation(tool, args, status, detail) method for structured JSON logging to console.error
+    - tdd: no
+    - verify: `node -e "import('./src/index.js').then(m => { const s = new m.GovernedMCPServer({name:'test',version:'1.0'}, {}); s.logOperation('test','{}','success'); })"`
+  - [ ] 3.4 Implement registerTool(toolDef, handler) that wraps handler with permission check before execution
+    - tdd: no
+    - verify: `node -e "import('./src/index.js').then(m => { const s = new m.GovernedMCPServer({name:'test',version:'1.0'}, {}); s.registerTool({name:'test_get',description:'test',inputSchema:{}}, async()=>({content:[{type:'text',text:'ok'}]})); console.log('registered'); })"`
+  - [ ] 3.5 Implement start() method to initialize MCP stdio transport and connect server
     - tdd: no
     - verify: Manual verification via example server
-  - [ ] 3.6 Add comprehensive error handling for permission denials with helpful messages
-    - tdd: yes
-    - verify: `node -e "import('./src/index.js').then(m => { const s = new m.GovernedMCPServer({name:'test',version:'1.0'}, {test:{delete:'deny'}}); s.registerTool({name:'test_delete'}, async()=>({})); })"`
-  - [ ] 3.7 Verify: Manual test of GovernedMCPServer with mock tools - permission checks and audit logs work correctly
+  - [ ] 3.6 Add error handling for permission denials - return MCP-compliant error with helpful message
+    - tdd: no
+    - verify: Check error response format matches MCP spec
+  - [ ] 3.7 Verify: Create simple test in node REPL - GovernedMCPServer blocks denied operations and logs all attempts
 
 - [ ] 4.0 GitHub Example Implementation
-  - [ ] 4.1 Create examples/github/.env.example with GITHUB_TOKEN placeholder
+  - [ ] 4.1 Create examples/github/.env.example with GITHUB_TOKEN placeholder and instructions
     - tdd: no
     - verify: `cat /home/hamr/PycharmProjects/mcp-gov/examples/github/.env.example`
-  - [ ] 4.2 Create examples/github/rules.json with read: allow, write: allow, delete: deny
+  - [ ] 4.2 Create examples/github/rules.json with github: {read: "allow", write: "allow", delete: "deny", admin: "deny"}
     - tdd: no
     - verify: `cat /home/hamr/PycharmProjects/mcp-gov/examples/github/rules.json | jq .`
-  - [ ] 4.3 Implement github_list_repos tool in examples/github/server.js using GitHub API
+  - [ ] 4.3 Implement github_list_repos tool - GET /user/repos, returns list of user's repositories
     - tdd: no
-    - verify: Manual test with valid API key
-  - [ ] 4.4 Implement github_delete_repo tool in examples/github/server.js using GitHub API
+    - verify: Manual test with valid GitHub token
+  - [ ] 4.4 Implement github_delete_repo tool - DELETE /repos/{owner}/{repo}, requires repo_name parameter
     - tdd: no
-    - verify: Manual test with valid API key (should be blocked by rules)
-  - [ ] 4.5 Wire up GovernedMCPServer with tools and rules in examples/github/server.js
+    - verify: Manual test (should be blocked by rules)
+  - [ ] 4.5 Wire up GovernedMCPServer with both tools and rules in examples/github/server.js
     - tdd: no
-    - verify: `node /home/hamr/PycharmProjects/mcp-gov/examples/github/server.js --version`
-  - [ ] 4.6 Add environment variable loading with dotenv in examples/github/server.js
+    - verify: `node /home/hamr/PycharmProjects/mcp-gov/examples/github/server.js` (check it starts)
+  - [ ] 4.6 Add dotenv config loading and error handling for missing GITHUB_TOKEN
     - tdd: no
-    - verify: `node -e "import('dotenv').then(d => console.log('dotenv loaded'))"`
-  - [ ] 4.7 Verify: `node examples/github/server.js` - Server starts without errors and listens for MCP requests
+    - verify: `node examples/github/server.js` without .env shows helpful error
+  - [ ] 4.7 Verify: Server starts without errors, shows "MCP Server started" message, ready for stdio connections
 
 - [ ] 5.0 End-to-End Testing with Claude Desktop
-  - [ ] 5.1 Create Claude Desktop MCP configuration file pointing to GitHub example server
+  - [ ] 5.1 Create Claude Desktop MCP configuration file entry for github-governed server
     - tdd: no
-    - verify: Manual check of Claude Desktop config
-  - [ ] 5.2 Test github_list_repos via Claude Desktop - verify successful execution and audit logs
+    - verify: Check config file at ~/.config/Claude/claude_desktop_config.json (or platform equivalent)
+  - [ ] 5.2 Test github_list_repos via Claude Desktop - verify it lists repositories successfully
     - tdd: no
-    - verify: Manual test in Claude Desktop
-  - [ ] 5.3 Test github_delete_repo via Claude Desktop - verify permission denial error and audit logs
+    - verify: Claude Desktop chat - "List my GitHub repositories"
+  - [ ] 5.3 Test github_delete_repo via Claude Desktop - verify it's blocked with permission denied error
     - tdd: no
-    - verify: Manual test in Claude Desktop
-  - [ ] 5.4 Review audit logs for completeness (timestamp, tool, args, status, detail)
+    - verify: Claude Desktop chat - "Delete the test-repo repository" → blocked
+  - [ ] 5.4 Review audit logs in stderr - verify all operations logged with timestamp, tool, status
     - tdd: no
-    - verify: `tail -f stderr.log` during tests
-  - [ ] 5.5 Verify: End-to-end flow works - read operations succeed, delete operations blocked, all logged
+    - verify: `node examples/github/server.js 2>&1 | grep -E "github_list_repos|github_delete_repo"`
+  - [ ] 5.5 Verify: End-to-end flow complete - read works, delete blocked, all logged
 
-- [ ] 6.0 Documentation Enhancement
-  - [ ] 6.1 Update README.md with complete installation instructions (npm install, API key setup)
+- [ ] 6.0 Documentation
+  - [ ] 6.1 Update README.md with installation instructions and quick start example
     - tdd: no
-    - verify: `cat /home/hamr/PycharmProjects/mcp-gov/README.md`
-  - [ ] 6.2 Add API reference section to README.md (GovernedMCPServer constructor, methods, parameters)
-    - tdd: no
-    - verify: `grep -A 20 "## API Reference" /home/hamr/PycharmProjects/mcp-gov/README.md`
-  - [ ] 6.3 Add architecture diagram (ASCII art) to README.md showing library wrapping MCP SDK
-    - tdd: no
-    - verify: `grep -A 10 "Architecture" /home/hamr/PycharmProjects/mcp-gov/README.md`
-  - [ ] 6.4 Create examples/github/README.md with step-by-step setup instructions
+    - verify: `grep -A 10 "## Installation" /home/hamr/PycharmProjects/mcp-gov/README.md`
+  - [ ] 6.2 Create examples/github/README.md with setup steps (get token, configure .env, run server)
     - tdd: no
     - verify: `cat /home/hamr/PycharmProjects/mcp-gov/examples/github/README.md`
-  - [ ] 6.5 Add Claude Desktop configuration instructions to examples/github/README.md
+  - [ ] 6.3 Add Claude Desktop configuration instructions to examples/github/README.md
     - tdd: no
-    - verify: `grep "Claude Desktop" /home/hamr/PycharmProjects/mcp-gov/examples/github/README.md`
-  - [ ] 6.6 Add troubleshooting section to README.md (common errors, solutions)
-    - tdd: no
-    - verify: `grep -A 5 "## Troubleshooting" /home/hamr/PycharmProjects/mcp-gov/README.md`
-  - [ ] 6.7 Update README.md with code examples showing complete usage workflow
-    - tdd: no
-    - verify: `grep -A 20 "## Quick Start" /home/hamr/PycharmProjects/mcp-gov/README.md`
-  - [ ] 6.8 Verify: README.md is comprehensive - new user can get started without external help
+    - verify: `grep "claude_desktop_config.json" /home/hamr/PycharmProjects/mcp-gov/examples/github/README.md`
+  - [ ] 6.4 Verify: A new developer can clone repo, follow README, and get it working in 15 minutes
 
-- [ ] 7.0 Final Polish and Validation
-  - [ ] 7.1 Add JSDoc comments to all exported functions in src/index.js
+- [ ] 7.0 Final Validation and Commit
+  - [ ] 7.1 Add brief code comments to exported functions (one-line description of what each does)
     - tdd: no
-    - verify: `grep -c "@param" /home/hamr/PycharmProjects/mcp-gov/src/index.js`
-  - [ ] 7.2 Add JSDoc comments to operation-detector.js functions
+    - verify: `grep -E "^export|^\/\/" /home/hamr/PycharmProjects/mcp-gov/src/index.js | head -20`
+  - [ ] 7.2 Run complete end-to-end test: list repos (works), delete repo (blocked), check audit logs (complete)
     - tdd: no
-    - verify: `grep -c "@param" /home/hamr/PycharmProjects/mcp-gov/src/operation-detector.js`
-  - [ ] 7.3 Review all error messages for clarity and helpfulness
+    - verify: Manual checklist - all 3 scenarios tested and working
+  - [ ] 7.3 Git commit all changes with descriptive message
     - tdd: no
-    - verify: `grep -r "Error\|denied" /home/hamr/PycharmProjects/mcp-gov/src/`
-  - [ ] 7.4 Test with invalid rules.json (missing service, invalid values) - verify helpful error messages
-    - tdd: no
-    - verify: Manual test with malformed rules
-  - [ ] 7.5 Test with missing .env file - verify helpful error message about API key
-    - tdd: no
-    - verify: Manual test without .env
-  - [ ] 7.6 Run complete end-to-end test suite manually (read operations, write operations, delete operations, audit logs)
-    - tdd: no
-    - verify: Manual checklist completion
-  - [ ] 7.7 Create CONTRIBUTING.md with guidelines for contributions
-    - tdd: no
-    - verify: `cat /home/hamr/PycharmProjects/mcp-gov/CONTRIBUTING.md`
-  - [ ] 7.8 Verify: All components working together - library is production-ready for POC
+    - verify: `git log -1 --oneline`
+  - [ ] 7.4 Verify: POC is complete - library works, example works, documented, committed to git
