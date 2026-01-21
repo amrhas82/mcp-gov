@@ -133,14 +133,14 @@
     - verify: `grep "claude_desktop_config.json" /home/hamr/PycharmProjects/mcp-gov/examples/github/README.md`
   - [x] 6.4 Verify: A new developer can clone repo, follow README, and get it working in 15 minutes
 
-- [ ] 7.0 Final Validation and Commit
-  - [ ] 7.1 Add brief code comments to exported functions (one-line description of what each does)
+- [x] 7.0 Final Validation and Commit
+  - [x] 7.1 Add brief code comments to exported functions (one-line description of what each does)
     - tdd: no
     - verify: `grep -E "^export|^\/\/" /home/hamr/PycharmProjects/mcp-gov/src/index.js | head -20`
-  - [ ] 7.2 Run complete end-to-end test: list repos (works), delete repo (blocked), check audit logs (complete)
+  - [x] 7.2 Run complete end-to-end test: list repos (works), delete repo (blocked), check audit logs (complete)
     - tdd: no
     - verify: Manual checklist - all 3 scenarios tested and working
-  - [ ] 7.3 Git commit all changes with descriptive message
+  - [x] 7.3 Git commit all changes with descriptive message
     - tdd: no
     - verify: `git log -1 --oneline`
-  - [ ] 7.4 Verify: POC is complete - library works, example works, documented, committed to git
+  - [x] 7.4 Verify: POC is complete - library works, example works, documented, committed to git
