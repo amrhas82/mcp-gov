@@ -35,7 +35,7 @@ Create a lightweight, developer-friendly library that adds enterprise-grade gove
 
 **POC Success (4-hour build):**
 - Library runs without errors
-- Example Todoist server connects to Claude Desktop
+- Example GitHub server connects to Claude Desktop
 - Read operations execute successfully
 - Delete operations blocked with clear error messages
 - Audit logs capture all operations
@@ -167,12 +167,12 @@ const server = new GovernedMCPServer(
    - **execute:** send, run, trigger, start, invoke, publish, deploy, execute
    - **delete:** delete, remove, destroy, archive, drop
    - **admin:** admin, configure, manage, settings, permission, grant
-3. Extracting service name from tool name prefix (e.g., `todoist_` → `todoist`)
+3. Extracting service name from tool name prefix (e.g., `github_` → `github`)
 4. Handling underscore and hyphen separators
 5. Defaulting to 'write' if no verb matches (conservative approach)
 
 **Examples:**
-- `todoist_list_tasks` → service: `todoist`, operation: `read`
+- `github_list_repos` → service: `github`, operation: `read`
 - `gmail_send_email` → service: `gmail`, operation: `execute`
 - `github_manage_settings` → service: `github`, operation: `admin`
 - `github_create_issue` → service: `github`, operation: `write`
@@ -206,20 +206,20 @@ Operation denied: [operation_type] operations are not allowed for [service_name]
 ```json
 {
   "timestamp": "2025-01-21T12:34:56.789Z",
-  "tool": "todoist_delete_task",
-  "args": "{\"task_id\":\"12345\"}",
+  "tool": "github_delete_repo",
+  "args": "{\"repo_name\":\"12345\"}",
   "status": "denied",
-  "detail": "Operation denied: delete operations are not allowed for todoist"
+  "detail": "Operation denied: delete operations are not allowed for github"
 }
 ```
 
-### FR6: Example Todoist Server
+### FR6: Example GitHub Server
 **The system must include a working example** that:
 1. Implements MCP server using GovernedMCPServer
-2. Integrates with Todoist API (requires API key)
+2. Integrates with GitHub API (requires API key)
 3. Provides at least 2 tools:
-   - `todoist_list_tasks` (read operation)
-   - `todoist_delete_task` (delete operation)
+   - `github_list_repos` (read operation)
+   - `github_delete_repo` (delete operation)
 4. Includes rules.json with delete operations denied
 5. Demonstrates permission blocking when AI attempts delete
 6. Can connect to Claude Desktop for end-to-end testing
@@ -232,7 +232,7 @@ Operation denied: [operation_type] operations are not allowed for [service_name]
 3. Quick start code example (5-10 lines)
 4. Complete API reference for GovernedMCPServer
 5. Permission rules schema and examples
-6. How to run the Todoist example
+6. How to run the GitHub example
 7. How to connect to Claude Desktop
 8. Architecture diagram (ASCII/text)
 9. Contributing guidelines
@@ -264,7 +264,7 @@ Operation denied: [operation_type] operations are not allowed for [service_name]
 - Web UI for rule management and audit log viewing
 - Custom operation classifiers (developer-provided)
 - Policy templates for common use cases
-- Glob pattern support in tool names (`todoist_*_task`)
+- Glob pattern support in tool names (`github_*_task`)
 - Fine-grained argument-level permissions
 - Integration with secrets managers
 
@@ -327,9 +327,9 @@ mcp-governance/
 │   └── operation-keywords.js       # Keyword mapping constants (~50 lines)
 │
 ├── examples/                       # Example implementations
-│   ├── todoist/
-│   │   ├── server.js              # Todoist MCP server with governance (~50 lines)
-│   │   ├── rules.json             # Permission rules for Todoist
+│   ├── github/
+│   │   ├── server.js              # GitHub MCP server with governance (~50 lines)
+│   │   ├── rules.json             # Permission rules for GitHub
 │   │   ├── .env.example           # API key template
 │   │   └── README.md              # How to run this example
 │   └── github/                    # (Future: GitHub example)
@@ -368,13 +368,13 @@ mcp-governance/
 - ~160 keywords across 5 operation types
 - Single source of truth for keyword mapping
 
-**examples/todoist/server.js:**
+**examples/github/server.js:**
 - Concrete implementation using the library
 - Demonstrates real-world usage
 - Can be copied and modified by users
-- Connects to Todoist API
+- Connects to GitHub API
 
-**examples/todoist/rules.json:**
+**examples/github/rules.json:**
 - Example permission configuration
 - Shows all 5 permission levels
 - Documented with inline comments
@@ -432,7 +432,7 @@ Status: status, info, describe, details, summary, stat
 ```
 
 **Examples:**
-- `todoist_list_tasks` → read
+- `github_list_repos` → read
 - `github_get_user` → read
 - `api_search_records` → read
 
@@ -447,7 +447,7 @@ Configure: configure, adjust, tune, customize
 ```
 
 **Examples:**
-- `todoist_create_task` → write
+- `github_create_issue` → write
 - `github_update_issue` → write
 - `api_patch_resource` → write
 
@@ -479,7 +479,7 @@ Reset: reset, wipe, flush, clean, prune
 ```
 
 **Examples:**
-- `todoist_delete_task` → delete
+- `github_delete_repo` → delete
 - `db_drop_table` → delete
 - `cache_clear_all` → delete
 
@@ -637,7 +637,7 @@ type PermissionRules = {
 **Example rules.json:**
 ```json
 {
-  "todoist": {
+  "github": {
     "read": "allow",
     "write": "allow",
     "delete": "deny"
@@ -669,9 +669,9 @@ type AuditLogEntry = {
 
 **Example log entries:**
 ```json
-{"timestamp":"2025-01-21T12:34:56.789Z","tool":"todoist_list_tasks","args":"{}","status":"allowed"}
-{"timestamp":"2025-01-21T12:35:01.234Z","tool":"todoist_list_tasks","args":"{}","status":"success","detail":"Returned 5 tasks"}
-{"timestamp":"2025-01-21T12:35:10.567Z","tool":"todoist_delete_task","args":"{\"task_id\":\"12345\"}","status":"denied","detail":"Operation denied: delete operations are not allowed for todoist"}
+{"timestamp":"2025-01-21T12:34:56.789Z","tool":"github_list_repos","args":"{}","status":"allowed"}
+{"timestamp":"2025-01-21T12:35:01.234Z","tool":"github_list_repos","args":"{}","status":"success","detail":"Returned 5 repos"}
+{"timestamp":"2025-01-21T12:35:10.567Z","tool":"github_delete_repo","args":"{\"repo_name\":\"12345\"}","status":"denied","detail":"Operation denied: delete operations are not allowed for github"}
 ```
 
 ### 8.4 Operation Detection Logic
@@ -692,7 +692,7 @@ const OPERATION_VERBS = {
 4. Default to 'read' if no verb matches
 
 **Examples:**
-- `todoist_list_tasks` → service=`todoist`, verb=`list`, operation=`read`
+- `github_list_repos` → service=`github`, verb=`list`, operation=`read`
 - `github-create-issue` → service=`github`, verb=`create`, operation=`write`
 - `notion_delete_page` → service=`notion`, verb=`delete`, operation=`delete`
 - `slack_custom_action` → service=`slack`, verb=`custom`, operation=`read` (default)
@@ -711,13 +711,13 @@ const OPERATION_VERBS = {
 ### 9.2 Test Scenarios
 
 **Scenario 1: Read Operation Allowed**
-- Setup: Rule `{todoist: {read: 'allow'}}`
-- Action: Ask Claude "List my Todoist tasks"
+- Setup: Rule `{github: {read: 'allow'}}`
+- Action: Ask Claude "List my GitHub tasks"
 - Expected: Tasks returned, log shows "allowed" and "success"
 
 **Scenario 2: Delete Operation Denied**
-- Setup: Rule `{todoist: {delete: 'deny'}}`
-- Action: Ask Claude "Delete task 12345 from Todoist"
+- Setup: Rule `{github: {delete: 'deny'}}`
+- Action: Ask Claude "Delete task 12345 from GitHub"
 - Expected: Error message returned, log shows "denied"
 
 **Scenario 3: Missing Rule Defaults**
@@ -748,7 +748,7 @@ const OPERATION_VERBS = {
 - npm or yarn package manager
 
 ### 10.2 External Services (for examples)
-- Todoist account with API key
+- GitHub account with API key
 - (Future examples: GitHub, Notion, Gmail APIs)
 
 ### 10.3 NPM Dependencies
@@ -824,7 +824,7 @@ const OPERATION_VERBS = {
 **Recommendation:** A for POC, add B as optional feature if requested
 
 ### Q3: Tool Name Pattern Matching
-**Question:** Should we support glob patterns in rules (e.g., `todoist_*_task`)?
+**Question:** Should we support glob patterns in rules (e.g., `github_*_task`)?
 
 **Options:**
 - A) **Exact service name only** - Simpler, sufficient for POC
@@ -835,7 +835,7 @@ const OPERATION_VERBS = {
 ### Q4: Permission Error Messages
 **Question:** Should error messages include suggestions for fixing the rule?
 
-**Example:** "Operation denied: delete operations are not allowed for todoist. To allow, set {todoist: {delete: 'allow'}} in rules.json"
+**Example:** "Operation denied: delete operations are not allowed for github. To allow, set {github: {delete: 'allow'}} in rules.json"
 
 **Options:**
 - A) **Simple error only** - Cleaner, less verbose
@@ -894,10 +894,10 @@ This is a successful learning experience if:
 - Write basic unit tests (manual console verification)
 
 ### Hour 2: Example Implementation
-- Create examples/todoist/ directory
-- Implement Todoist API client wrapper
-- Create todoist_list_tasks tool
-- Create todoist_delete_task tool
+- Create examples/github/ directory
+- Implement GitHub API client wrapper
+- Create github_list_repos tool
+- Create github_delete_repo tool
 - Create rules.json with delete denied
 - Add .env.example and environment loading
 
@@ -968,7 +968,7 @@ This is a successful learning experience if:
 ### A. Reference Links
 - MCP Protocol Specification: https://modelcontextprotocol.io/
 - MCP SDK Documentation: https://github.com/anthropic-ai/modelcontextprotocol
-- Todoist API: https://developer.todoist.com/rest/v2/
+- GitHub API: https://developer.github.com/rest/v2/
 - Claude Desktop: https://claude.ai/download
 
 ### B. Glossary
@@ -997,7 +997,7 @@ const server = new GovernedMCPServer(
 
 server.registerTool(
   {
-    name: 'todoist_list_tasks',
+    name: 'github_list_repos',
     description: 'List all tasks',
     inputSchema: { type: 'object', properties: {} }
   },
@@ -1013,7 +1013,7 @@ await server.start();
 **Rules Configuration:**
 ```json
 {
-  "todoist": {
+  "github": {
     "read": "allow",
     "write": "allow",
     "delete": "deny"
@@ -1023,9 +1023,9 @@ await server.start();
 
 **Expected Audit Log Output:**
 ```
-{"timestamp":"2025-01-21T12:34:56.789Z","tool":"todoist_list_tasks","args":"{}","status":"allowed"}
-{"timestamp":"2025-01-21T12:34:57.123Z","tool":"todoist_list_tasks","args":"{}","status":"success","detail":"Returned 5 tasks"}
-{"timestamp":"2025-01-21T12:35:10.456Z","tool":"todoist_delete_task","args":"{\"task_id\":\"12345\"}","status":"denied","detail":"Operation denied: delete operations are not allowed for todoist"}
+{"timestamp":"2025-01-21T12:34:56.789Z","tool":"github_list_repos","args":"{}","status":"allowed"}
+{"timestamp":"2025-01-21T12:34:57.123Z","tool":"github_list_repos","args":"{}","status":"success","detail":"Returned 5 repos"}
+{"timestamp":"2025-01-21T12:35:10.456Z","tool":"github_delete_repo","args":"{\"repo_name\":\"12345\"}","status":"denied","detail":"Operation denied: delete operations are not allowed for github"}
 ```
 
 ---
