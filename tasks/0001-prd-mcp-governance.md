@@ -312,22 +312,83 @@ Operation denied: [operation_type] operations are not allowed for [service_name]
 
 **Key Design Principle:** The library is middleware that wraps the MCP SDK Server class, intercepting tool calls to inject permission checks and audit logging before delegating to the original handler.
 
-### 6.3 File Structure
+### 6.3 Repository Structure
+
+**Complete file structure:**
 ```
 mcp-governance/
-├── package.json              # Dependencies (~10 lines)
-├── README.md                 # Documentation
-├── LICENSE                   # MIT License
-├── src/
-│   └── index.js             # Library implementation (~120 lines)
-├── examples/
-│   └── todoist/
-│       ├── server.js        # Example MCP server (~50 lines)
-│       ├── rules.json       # Permission configuration
-│       ├── .env.example     # API key template
-│       └── README.md        # Example-specific docs
-└── .gitignore               # Node modules, .env
+├── package.json                    # Project metadata, dependencies, scripts
+├── README.md                       # Project overview, quick start
+├── LICENSE                         # MIT License
+│
+├── src/                            # Library source code
+│   ├── index.js                    # Main export: GovernedMCPServer class (~150 lines)
+│   ├── operation-detector.js       # Operation detection logic (~100 lines)
+│   └── operation-keywords.js       # Keyword mapping constants (~50 lines)
+│
+├── examples/                       # Example implementations
+│   ├── todoist/
+│   │   ├── server.js              # Todoist MCP server with governance (~50 lines)
+│   │   ├── rules.json             # Permission rules for Todoist
+│   │   ├── .env.example           # API key template
+│   │   └── README.md              # How to run this example
+│   └── github/                    # (Future: GitHub example)
+│
+├── docs/                          # Documentation
+│   ├── operation-keywords.md      # Comprehensive keyword reference
+│   ├── permission-levels.md       # Permission levels guide
+│   └── api-reference.md           # (Future: API documentation)
+│
+├── tasks/                         # Project management
+│   └── 0001-prd-mcp-governance.md # This document (PRD)
+│
+├── tests/                         # (Future: Automated tests)
+│   └── operation-detector.test.js
+│
+├── .gitignore                     # Git ignore rules
+└── .npmignore                     # (Future: NPM publish ignore rules)
 ```
+
+**File Responsibilities:**
+
+**src/index.js:**
+- Export `GovernedMCPServer` class
+- Tool registration and MCP server orchestration
+- Permission enforcement integration
+- Audit logging coordination
+
+**src/operation-detector.js:**
+- Export `detectOperation(toolName)` function
+- Export `parseToolName(toolName)` function
+- Service name extraction logic
+- Encapsulates all text parsing logic
+
+**src/operation-keywords.js:**
+- Export `OPERATION_KEYWORDS` constant (exhaustive list)
+- ~160 keywords across 5 operation types
+- Single source of truth for keyword mapping
+
+**examples/todoist/server.js:**
+- Concrete implementation using the library
+- Demonstrates real-world usage
+- Can be copied and modified by users
+- Connects to Todoist API
+
+**examples/todoist/rules.json:**
+- Example permission configuration
+- Shows all 5 permission levels
+- Documented with inline comments
+
+**docs/operation-keywords.md:**
+- Complete reference of all keywords
+- Detection algorithm explanation
+- Edge cases and ambiguous keywords
+- Testing examples
+
+**docs/permission-levels.md:**
+- User-facing guide to permission levels
+- Real-world scenarios (Gmail, Database, CI/CD)
+- Best practices and security considerations
 
 ### 6.4 Core Components
 
@@ -352,6 +413,157 @@ mcp-governance/
 - Input: log entry object
 - Output: JSON to console.error
 - Logic: Format timestamp, truncate args, stringify to JSON
+
+### 6.5 Operation Detection Keywords (Exhaustive List)
+
+**Purpose:** The library uses text parsing to detect operation types from tool names. This requires a comprehensive, well-maintained keyword list that covers common API verbs across different domains.
+
+**Total Keywords:** ~160 across 5 operation types
+
+#### READ Keywords (~35 keywords)
+**Intent:** View, query, retrieve data without modification
+
+```
+Primary: read, get, fetch, retrieve, list, show, view, display
+Query: query, search, find, lookup, select, scan, index, count
+Inspect: check, validate, verify, inspect, examine, test, peek, preview
+Download: download, dump, export, extract, pull, clone
+Status: status, info, describe, details, summary, stat
+```
+
+**Examples:**
+- `todoist_list_tasks` → read
+- `github_get_user` → read
+- `api_search_records` → read
+
+#### WRITE Keywords (~30 keywords)
+**Intent:** Create new data or modify existing (no delete)
+
+```
+Create: create, add, new, insert, post, put, make, build, generate, initialize, setup, register
+Update: update, modify, edit, change, set, patch, alter, amend, revise, replace
+Append: append, push, attach, extend, increment
+Configure: configure, adjust, tune, customize
+```
+
+**Examples:**
+- `todoist_create_task` → write
+- `github_update_issue` → write
+- `api_patch_resource` → write
+
+#### EXECUTE Keywords (~35 keywords)
+**Intent:** Perform operations with external effects
+
+```
+Send: send, notify, broadcast, transmit
+Execute: execute, run, invoke, call, trigger, fire, launch, start, begin
+Process: process, compile, build, deploy, render, convert, transform
+Workflow: schedule, queue, enqueue, dispatch, submit, publish
+```
+
+**Examples:**
+- `gmail_send_email` → execute
+- `jenkins_trigger_build` → execute
+- `lambda_invoke_function` → execute
+
+**Note:** Ambiguous words like "email" and "message" as standalone nouns are NOT included to avoid false positives. Only action verbs are included.
+
+#### DELETE Keywords (~25 keywords)
+**Intent:** Remove, destroy, or permanently modify data
+
+```
+Delete: delete, remove, destroy, drop, purge, clear, erase
+Archive: archive, trash, discard, abandon
+Cancel: cancel, abort, terminate, kill, stop, halt
+Reset: reset, wipe, flush, clean, prune
+```
+
+**Examples:**
+- `todoist_delete_task` → delete
+- `db_drop_table` → delete
+- `cache_clear_all` → delete
+
+#### ADMIN Keywords (~35 keywords)
+**Intent:** Manage system, users, permissions, infrastructure
+
+```
+Admin: admin, administer, administrate
+Manage: manage, grant, revoke, assign, unassign
+Users: invite, approve, reject, block, unblock, ban, unban, promote, demote
+Permissions: permission, authorize, authenticate, allow, deny, enable, disable
+System: restart, reboot, upgrade, downgrade, scale, provision, install, uninstall, migrate
+```
+
+**Examples:**
+- `github_manage_settings` → admin
+- `salesforce_grant_permission` → admin
+- `aws_provision_server` → admin
+
+#### Detection Algorithm
+
+```
+1. Normalize tool name to lowercase
+2. Split by underscore (_) or hyphen (-)
+3. Check each word against keyword lists in priority order:
+   a. admin (most restrictive)
+   b. delete
+   c. execute
+   d. write
+   e. read (least restrictive)
+4. Return first match
+5. Default to "write" if no match (conservative)
+```
+
+**Priority Example:**
+```
+Tool: "admin_create_user"
+Words: ["admin", "create", "user"]
+Check: admin keywords → MATCH "admin" → return "admin"
+(Skips checking "create" since admin already matched)
+```
+
+#### Edge Cases & Ambiguous Keywords
+
+**Words with multiple meanings:**
+
+| Word | As Verb | As Noun | Resolution |
+|------|---------|---------|------------|
+| publish | execute | - | Include (verb form common) |
+| archive | delete | write | Include in delete (destructive assumption) |
+| test | read/execute | - | Include in read (safer default) |
+| reset | delete | write | Include in delete (destructive assumption) |
+
+**Compound actions:**
+- `"fork_and_clone"` → Contains "clone" (read), but creates new resource → Manual override needed
+- `"sync_data"` → Ambiguous → Defaults to write
+
+**Handling ambiguity:** When in doubt, choose the MORE restrictive classification to err on the side of caution.
+
+#### Maintenance & Extensibility
+
+**Future additions** (based on user feedback):
+- Domain-specific verbs (e.g., "subscribe", "unsubscribe" for messaging)
+- Regional variants (e.g., British vs American spelling)
+- Acronyms (e.g., "CRUD" operations)
+
+**Extension mechanism** (Post-POC):
+```javascript
+// Allow custom keyword additions
+server.addOperationKeywords('execute', ['blast', 'yeet']);
+
+// Manual operation override
+server.registerTool(
+  { name: 'weird_action', operation: 'delete' },
+  handler
+);
+```
+
+**Keyword List Location:**
+- Documented: `docs/operation-keywords.md` (comprehensive reference)
+- Implemented: `src/operation-keywords.js` (code constants)
+- Tested: `tests/operation-detector.test.js` (~60 test cases)
+
+**Accuracy Target:** 90-95% for well-named tools, 100% with manual overrides
 
 ---
 
