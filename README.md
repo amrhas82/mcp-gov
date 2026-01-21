@@ -24,10 +24,12 @@ import { GovernedMCPServer } from 'mcp-governance';
 const server = new GovernedMCPServer(
   { name: 'my-server', version: '1.0.0' },
   {
-    todoist: {
-      read: 'allow',
-      write: 'allow',
-      delete: 'deny'  // Prevent AI from deleting tasks
+    gmail: {
+      read: 'allow',    // Can read emails
+      write: 'allow',   // Can compose drafts
+      execute: 'deny',  // Cannot send emails
+      delete: 'deny',   // Cannot delete emails
+      admin: 'deny'     // Cannot change settings
     }
   }
 );
@@ -37,11 +39,24 @@ server.registerTool(toolDef, handler);
 await server.start();
 ```
 
+## Permission Levels
+
+Control AI access with 5 granular permission levels:
+
+- **read** - View-only access (safest)
+- **write** - Create/update data (no delete)
+- **execute** - Run operations, send emails, trigger actions
+- **delete** - Remove data (dangerous)
+- **admin** - Full control over settings (most dangerous)
+
+See [Permission Levels Guide](./docs/permission-levels.md) for detailed examples.
+
 ## Why?
 
 MCP servers give AI agents powerful access to your tools. This library lets you:
 - Make services read-only
-- Block dangerous operations
+- Block dangerous operations (delete, admin)
+- Separate "compose email" from "send email" (write vs execute)
 - Log everything for audit trails
 - Enforce policies before allowing operations
 

@@ -26,7 +26,7 @@ Create a lightweight, developer-friendly library that adds enterprise-grade gove
 ## 2. Goals
 
 ### 2.1 Primary Goals
-1. **Enable Permission Control:** Developers can block specific operation types (read/write/delete) per service
+1. **Enable Permission Control:** Developers can block specific operation types (read/write/execute/delete/admin) per service
 2. **Provide Audit Trail:** Log all tool invocations with timestamp, args, and result for compliance
 3. **Maintain Simplicity:** Add governance in ~5 lines of code with zero build configuration
 4. **Demonstrate Value:** Working example that connects to Claude Desktop and blocks operations
@@ -126,18 +126,34 @@ const server = new GovernedMCPServer(
 ### FR2: Permission Rules System
 **The system must support JSON-based permission rules** that:
 1. Use service name as top-level key
-2. Support operation types: `read`, `write`, `delete`
+2. Support operation types: `read`, `write`, `execute`, `delete`, `admin`
 3. Accept values: `'allow'` or `'deny'` for each operation type
 4. Default to 'allow' if no rule exists for a service/operation
 5. Load from JSON file or JavaScript object
 
+**Operation Types:**
+- **read**: View, list, get, search, query data (safest)
+- **write**: Create, update, modify data (no delete)
+- **execute**: Run operations, trigger actions, send (e.g., send email)
+- **delete**: Remove, destroy data (dangerous)
+- **admin**: Full control, manage settings, users (most dangerous)
+
 **Schema:**
 ```json
 {
-  "serviceName": {
+  "gmail": {
     "read": "allow",
-    "write": "deny",
-    "delete": "deny"
+    "write": "allow",
+    "execute": "deny",
+    "delete": "deny",
+    "admin": "deny"
+  },
+  "github": {
+    "read": "allow",
+    "write": "allow",
+    "execute": "allow",
+    "delete": "deny",
+    "admin": "deny"
   }
 }
 ```
@@ -146,15 +162,19 @@ const server = new GovernedMCPServer(
 **The system must automatically detect operation types** by:
 1. Parsing tool names to extract operation verbs
 2. Mapping verbs to operation types:
-   - **read:** list, get, fetch, retrieve, search, query, find, show
+   - **read:** list, get, fetch, retrieve, search, query, find, show, view
    - **write:** create, add, update, modify, edit, set, post, put, patch
-   - **delete:** delete, remove, destroy, archive
+   - **execute:** send, run, trigger, start, invoke, publish, deploy, execute
+   - **delete:** delete, remove, destroy, archive, drop
+   - **admin:** admin, configure, manage, settings, permission, grant
 3. Extracting service name from tool name prefix (e.g., `todoist_` → `todoist`)
 4. Handling underscore and hyphen separators
-5. Defaulting to 'read' if operation type cannot be determined
+5. Defaulting to 'write' if no verb matches (conservative approach)
 
 **Examples:**
 - `todoist_list_tasks` → service: `todoist`, operation: `read`
+- `gmail_send_email` → service: `gmail`, operation: `execute`
+- `github_manage_settings` → service: `github`, operation: `admin`
 - `github_create_issue` → service: `github`, operation: `write`
 - `notion_delete_page` → service: `notion`, operation: `delete`
 
@@ -324,8 +344,9 @@ mcp-governance/
 
 **Component 3: OperationDetector**
 - Input: tool name
-- Output: {service: string, operation: 'read'|'write'|'delete'}
+- Output: {service: string, operation: 'read'|'write'|'execute'|'delete'|'admin'}
 - Logic: Extract service prefix, detect operation verb, map to type
+- Default: 'write' if no verb matches (conservative)
 
 **Component 4: AuditLogger**
 - Input: log entry object
@@ -371,7 +392,7 @@ mcp-governance/
 constructor(config, rules)
 ```
 - **config:** `{name: string, version: string}` - MCP server metadata
-- **rules:** `{[service: string]: {read?: 'allow'|'deny', write?: 'allow'|'deny', delete?: 'allow'|'deny'}}` - Permission rules
+- **rules:** `{[service: string]: {read?: 'allow'|'deny', write?: 'allow'|'deny', execute?: 'allow'|'deny', delete?: 'allow'|'deny', admin?: 'allow'|'deny'}}` - Permission rules
 
 **registerTool Method:**
 ```javascript
@@ -745,7 +766,7 @@ This is a successful learning experience if:
 - **Governance:** Policies and controls for what operations are allowed
 - **Audit Log:** Record of all operations attempted and their outcomes
 - **Permission Rule:** Configuration that allows or denies specific operation types
-- **Operation Type:** Category of operation (read, write, delete)
+- **Operation Type:** Category of operation (read, write, execute, delete, admin)
 - **Stdio Transport:** Communication method using stdin/stdout streams
 
 ### C. Example Usage Code
