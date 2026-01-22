@@ -1,0 +1,368 @@
+# Product Requirements Document: Auto-Wrap MCP Governance System
+
+## Overview
+
+MCP (Model Context Protocol) servers enable AI assistants to interact with external services (GitHub, Google, Slack, etc.), but these servers often expose dangerous operations like delete, modify, and execute that can cause data loss or unintended actions. This project delivers a lightweight runtime governance system that automatically wraps any MCP server with permission controls—without requiring server modifications or rebuilding.
+
+**Problem:** Users need to protect against dangerous MCP operations (deletes, destructive writes) but cannot modify third-party MCP servers, and existing governance solutions require complex server rewrites.
+
+**Solution:** Two minimal CLI tools that work together: a "dumb" proxy that intercepts tool calls at runtime and checks permissions, plus a generic wrapper that auto-discovers and wraps servers before running any MCP client tool.
+
+**Context:** Leverages existing operation-detector.js (160+ keywords, proven in GitHub example) and works with any MCP-compatible tool (Claude Code, Droid, desktop apps) using explicit config paths.
+
+## Goals
+
+1. **Runtime Protection:** Block dangerous operations (delete, destructive modifications) before execution, preventing data loss and unintended actions
+2. **Zero Server Modification:** Work transparently with any existing MCP server without code changes or rebuilds
+3. **Universal Compatibility:** Support all MCP client tools (CLI and desktop) across Linux, macOS, and Windows platforms
+4. **Minimal User Friction:** Auto-discover and wrap servers automatically; user runs tool normally after one-time alias setup
+
+## User Stories
+
+**As a DevOps engineer**, I want to enforce organization-wide governance policies on MCP servers so that teams cannot accidentally delete production resources through AI assistants.
+
+**As an individual developer**, I want to protect my GitHub repos from accidental deletions when using Claude Code so that I can experiment safely without risking data loss.
+
+**As a security team member**, I want audit logs of all blocked operations so that I can monitor policy violations and review governance effectiveness.
+
+**As a platform engineer**, I want to add governance to new MCP servers automatically so that all servers are protected without manual configuration each time.
+
+**As a CLI tool user**, I want governance to work with any MCP client (Claude, Droid, custom tools) so that I have consistent protection across my workflow.
+
+## Requirements
+
+### Core Proxy (mcp-gov-proxy)
+
+1. System MUST accept `--target <command>` and `--rules <path>` command-line arguments
+2. System MUST spawn target MCP server as subprocess and establish stdin/stdout piping
+3. System MUST intercept messages where `method === 'tools/call'`
+4. System MUST parse tool name using operation-detector.js to extract service and operation
+5. System MUST check permission against rules.json: if `rules[service][operation] === 'deny'`, return error response with "Permission denied"
+6. System MUST forward all non-blocked messages (including tools/list) to target server unchanged
+7. System MUST log all blocked operations to stderr with timestamp, tool name, service, and operation
+8. System MUST handle target server crashes gracefully and exit with error code
+9. System MUST preserve message formatting and JSON-RPC protocol compliance
+10. System MUST operate with zero knowledge of available tools (runtime-only interception)
+
+### Generic Wrapper (mcp-gov-wrap)
+
+11. System MUST accept `--config <path>`, `--rules <path>`, and `--tool <command>` arguments
+12. System MUST validate rules.json exists and is valid JSON; if missing or invalid, show error message with expected path and refuse to start
+13. System MUST read config file at specified path and detect format (Claude Code projects.mcpServers vs flat mcpServers)
+14. System MUST identify unwrapped servers (where command field does NOT contain 'mcp-gov-proxy')
+15. System MUST wrap each unwrapped server by replacing command with `mcp-gov-proxy --target "<original-command>" --rules <rules-path>`
+16. System MUST preserve all original server arguments and environment variables during wrapping
+17. System MUST create timestamped backup of config file before modifications (format: `config.json.backup.YYYYMMDD-HHMMSS`)
+18. System MUST detect if user manually edited config after previous wrapping and re-wrap only new/changed servers
+19. System MUST execute the actual tool command using exec() after wrapping completes
+20. System MUST handle malformed config files gracefully with clear error messages
+
+### Rules Configuration
+
+21. Rules file MUST use JSON format: `{"service": {"operation": "allow"|"deny"}}`
+22. System MUST support operation types: read, write, delete, execute, admin (from operation-detector.js)
+23. System MUST default to "allow" if service or operation not specified in rules
+24. Rules file MUST be validated on startup; invalid JSON or unrecognized operations must cause startup failure with descriptive error
+
+### Cross-Platform Support
+
+25. System MUST run on Linux, macOS, and Windows with identical behavior
+26. System MUST handle platform-specific path separators and line endings automatically
+27. System MUST support both Unix-style and Windows-style command syntax in config files
+28. Binary entry points MUST include proper shebang (`#!/usr/bin/env node`) for Unix platforms
+
+### Audit and Observability
+
+29. System MUST write audit logs to stderr (separate from tool stdout)
+30. Audit logs MUST include: timestamp (ISO 8601), action (allowed/denied), tool name, service, operation, rule matched
+31. System MUST log wrapper activity: servers detected, servers wrapped, config backup created
+32. System MUST NOT log sensitive data (auth tokens, file contents, user inputs)
+
+### User Experience
+
+33. Installation MUST work via `npm install -g mcp-gov` with automatic binary linking
+34. Users MUST be able to create tool-specific aliases (e.g., `alias claude='mcp-gov-wrap --config ~/.claude.json --rules ~/rules.json --tool claude'`)
+35. System MUST work with existing `claude mcp add` workflow (user adds server normally, wrapper auto-wraps on next run)
+36. Error messages MUST be actionable and include suggested fixes (e.g., "rules.json not found at <path>. Create file or specify correct path with --rules")
+
+## Non-Goals
+
+1. **Tool discovery at startup** - Proxy operates runtime-only, no pre-scanning of available tools
+2. **Universal proxy routing** - Each server gets individual 1:1 proxy (simpler, more reliable)
+3. **Config path guessing** - Always explicit via --config flag (no auto-detection of ~/.claude.json, etc.)
+4. **Tool-specific wrappers** - Single generic wrapper works for all MCP clients
+5. **Separate CLI for adding servers** - Users continue using native tool commands (claude mcp add, etc.)
+6. **GUI or web interface** - CLI-only for initial release
+7. **Dynamic rule reloading** - Rules loaded at startup only; changes require restart
+8. **Permission prompting** - All decisions based on rules.json; no interactive approval flows
+
+## Constraints
+
+1. **Technology:** Node.js (existing codebase dependency)
+2. **Protocol:** Must maintain JSON-RPC 2.0 compatibility for MCP standard
+3. **Reuse:** Must leverage existing operation-detector.js and operation-keywords.js (160+ keywords, already validated)
+4. **File size:** Proxy ~100 lines, wrapper ~150 lines (minimal implementation)
+5. **Config modification:** Must preserve user comments and formatting when possible (JSON.stringify limitations noted)
+
+## Success Metrics
+
+1. **Functional correctness:** Delete operations blocked successfully in integration tests (GitHub, Google, Slack examples)
+2. **Auto-discovery:** Wrapper detects and wraps 100% of unwrapped servers in config file
+3. **Compatibility:** Works with Claude Code and at least one other MCP tool (Droid or custom tool)
+4. **Performance:** No perceptible latency introduced (<50ms overhead per tool call)
+5. **User workflow:** User can run `claude mcp add <server>` followed by wrapper alias without errors
+6. **Audit coverage:** 100% of denied operations logged to stderr with complete metadata
+7. **Cross-platform:** Passes all tests on Linux, macOS, and Windows CI environments
+
+## Open Questions
+
+1. **Wrapper idempotency:** If wrapper crashes mid-execution after wrapping some but not all servers, should it detect partial wrapping and recover? (Current plan: re-wrap all unwrapped servers on next run)
+2. **Config format evolution:** If MCP tools introduce breaking config format changes, should wrapper include version detection logic? (Current plan: graceful error messages pointing users to manual fixes)
+3. **Multi-project configs:** Claude Code supports multiple projects; should wrapper accept `--project <name>` flag to target specific project? (Current plan: wrap all projects in config file)
+
+---
+
+## Technical Architecture Overview
+
+### Component Diagram
+```
+┌─────────────────────────────────────────────────────────────┐
+│ User runs: claude (aliased to mcp-gov-wrap ...)            │
+└───────────────────────┬─────────────────────────────────────┘
+                        │
+                        ▼
+┌─────────────────────────────────────────────────────────────┐
+│ mcp-gov-wrap                                                │
+│ 1. Read ~/.claude.json                                      │
+│ 2. Detect unwrapped servers (github, google, slack)         │
+│ 3. Wrap each: command → mcp-gov-proxy --target ... --rules  │
+│ 4. Save config + backup                                     │
+│ 5. exec('claude', args)                                     │
+└───────────────────────┬─────────────────────────────────────┘
+                        │
+                        ▼
+┌─────────────────────────────────────────────────────────────┐
+│ Claude Code (or other MCP client tool)                     │
+│ - Reads wrapped config                                      │
+│ - Spawns mcp-gov-proxy instances (one per server)           │
+└─────────────────────┬───────────────────────────────────────┘
+                      │
+        ┌─────────────┼─────────────┬─────────────────────────┐
+        ▼             ▼             ▼                         ▼
+┌──────────────┐ ┌──────────────┐ ┌──────────────┐   ┌──────────────┐
+│ mcp-gov-     │ │ mcp-gov-     │ │ mcp-gov-     │   │ mcp-gov-     │
+│ proxy        │ │ proxy        │ │ proxy        │   │ proxy        │
+│ (github)     │ │ (google)     │ │ (slack)      │   │ (contextX)   │
+└──────┬───────┘ └──────┬───────┘ └──────┬───────┘   └──────┬───────┘
+       │                │                │                   │
+       ▼                ▼                ▼                   ▼
+┌──────────────┐ ┌──────────────┐ ┌──────────────┐   ┌──────────────┐
+│ Target MCP   │ │ Target MCP   │ │ Target MCP   │   │ Target MCP   │
+│ Server       │ │ Server       │ │ Server       │   │ Server       │
+│ (github)     │ │ (google)     │ │ (slack)      │   │ (contextX)   │
+└──────────────┘ └──────────────┘ └──────────────┘   └──────────────┘
+```
+
+### Data Flow: Tool Call Interception
+```
+Claude AI Request: "Delete test-repo from GitHub"
+       │
+       ▼
+[mcp-gov-proxy receives JSON-RPC]
+{"method": "tools/call", "params": {"name": "github_delete_repo"}}
+       │
+       ▼
+[Parse tool name → service="github", operation="delete"]
+       │
+       ▼
+[Check rules.json: github.delete = "deny"]
+       │
+       ▼
+[Return error: "Permission denied"]
+       │
+       ▼
+[Log to stderr: "2026-01-22T10:30:45Z DENIED github_delete_repo"]
+       │
+       ▼
+Claude AI receives error, reports to user
+```
+
+### Configuration Example
+
+**Before wrapping (user's original ~/.claude.json):**
+```json
+{
+  "mcpServers": {
+    "github": {
+      "command": "node",
+      "args": ["/path/to/github/server.js"]
+    }
+  }
+}
+```
+
+**After wrapping (auto-modified by mcp-gov-wrap):**
+```json
+{
+  "mcpServers": {
+    "github": {
+      "command": "mcp-gov-proxy",
+      "args": [
+        "--target", "node /path/to/github/server.js",
+        "--rules", "/home/user/mcp-gov-rules.json"
+      ]
+    }
+  }
+}
+```
+
+**Rules file (~/mcp-gov-rules.json):**
+```json
+{
+  "github": {
+    "read": "allow",
+    "write": "allow",
+    "delete": "deny"
+  },
+  "google": {
+    "delete": "deny"
+  },
+  "slack": {
+    "delete": "deny",
+    "admin": "deny"
+  }
+}
+```
+
+---
+
+## Timeline and Phases
+
+### Phase 1: Core Proxy Implementation (Day 1, 3-4 hours)
+**Deliverables:**
+- `bin/mcp-gov-proxy.js` (~100 lines)
+- Unit tests for message interception and rule checking
+- Integration test with existing examples/github/server.js
+
+**Acceptance Criteria:**
+- Proxy blocks delete operations on GitHub example server
+- Audit logs appear in stderr with correct format
+- Non-blocked operations pass through unchanged
+
+### Phase 2: Generic Wrapper Implementation (Day 1, 3-4 hours)
+**Deliverables:**
+- `bin/mcp-gov-wrap.js` (~150 lines)
+- Config detection logic for Claude Code and flat formats
+- Unit tests for config parsing and server wrapping
+
+**Acceptance Criteria:**
+- Wrapper detects unwrapped servers in test config
+- Config backup created with timestamp
+- Wrapped config valid and loadable by MCP clients
+
+### Phase 3: Integration and Documentation (Day 2, 2-3 hours)
+**Deliverables:**
+- Updated package.json with bin entries
+- README.md with installation and usage instructions
+- examples/auto-wrap-example.md with walkthrough
+- End-to-end test script
+
+**Acceptance Criteria:**
+- `npm install -g .` works on Linux, macOS, Windows
+- Alias setup documented with copy-paste examples
+- E2E test passes: add server → wrap → block delete operation
+
+### Phase 4: Cross-Platform Validation (Day 2, 2-3 hours)
+**Deliverables:**
+- CI configuration for Linux, macOS, Windows
+- Platform-specific test cases
+- Troubleshooting guide for common issues
+
+**Acceptance Criteria:**
+- All tests pass on 3 platforms
+- Path handling works correctly (/ vs \)
+- Line endings handled automatically (LF vs CRLF)
+
+**Total Estimated Time:** 1.5-2 days (10-14 hours)
+
+---
+
+## Risk Assessment
+
+| Risk | Impact | Likelihood | Mitigation |
+|------|--------|------------|------------|
+| Config format changes in MCP tools | High | Medium | Graceful error messages; version detection in future release |
+| Proxy crashes causing tool failure | High | Low | Comprehensive error handling; proxy restarts with target server |
+| Rules.json becomes out of sync | Medium | Medium | Clear documentation; validation on startup with actionable errors |
+| Performance overhead on tool calls | Medium | Low | Minimal logic in hot path; <50ms target validated in prototype |
+| User manually breaks wrapped config | Low | Medium | Auto-detection and re-wrapping on each run; backup files for recovery |
+
+---
+
+## Dependencies and Reuse
+
+**Existing Components (No Changes Required):**
+- `src/operation-detector.js` - Parses tool names, detects operations (read/write/delete/execute/admin)
+- `src/operation-keywords.js` - 160+ keywords for operation detection, already validated
+- `examples/github/` - Working governance example, used for integration testing
+- `examples/github/rules.json` - Example rules file
+
+**New Components (To Build):**
+- `bin/mcp-gov-proxy.js` - Runtime proxy (~100 lines)
+- `bin/mcp-gov-wrap.js` - Generic wrapper (~150 lines)
+
+**Modified Components:**
+- `package.json` - Add bin entries for two new CLI tools
+- `README.md` - Update with simplified auto-wrap instructions
+
+**Total New Code:** ~250 lines
+
+---
+
+## Appendix: Example Usage
+
+### Initial Setup (One-Time)
+```bash
+# Install globally
+npm install -g mcp-gov
+
+# Create rules file
+cat > ~/mcp-gov-rules.json << 'EOF'
+{
+  "github": {"read": "allow", "write": "allow", "delete": "deny"},
+  "google": {"delete": "deny"},
+  "slack": {"delete": "deny", "admin": "deny"}
+}
+EOF
+
+# Create alias (add to ~/.bashrc or ~/.zshrc)
+alias claude='mcp-gov-wrap --config ~/.claude.json --rules ~/mcp-gov-rules.json --tool claude'
+```
+
+### Daily Usage
+```bash
+# Run Claude normally (auto-wraps on first run)
+claude
+
+# Add new MCP server using native command
+/usr/local/bin/claude mcp add context7 -- npx context7-mcp
+
+# Run Claude again (auto-wraps new server)
+claude
+```
+
+### Monitoring
+```bash
+# View audit logs (redirect stderr to file)
+claude 2> governance-audit.log
+
+# Check wrapped config
+cat ~/.claude.json | jq '.mcpServers'
+```
+
+---
+
+**Document Version:** 1.0
+**Last Updated:** 2026-01-22
+**Author:** Product Management (via Claude Code PRD Agent)
+**Status:** Ready for Implementation

@@ -1,0 +1,206 @@
+# Auto-Wrap MCP Governance System - Task List
+
+## Relevant Files
+
+- `bin/mcp-gov-proxy.js` - Core proxy that intercepts tool calls and checks permissions (NEW)
+- `bin/mcp-gov-wrap.js` - Generic wrapper that auto-discovers and wraps MCP servers (NEW)
+- `package.json` - Add bin entries for CLI tools
+- `src/operation-detector.js` - Existing operation detection (reuse, no changes)
+- `src/operation-keywords.js` - Existing 160+ keywords (reuse, no changes)
+- `examples/github/server.js` - Existing GitHub example for integration testing
+- `examples/github/rules.json` - Existing rules file example
+- `test/proxy.test.js` - Unit tests for proxy functionality (NEW)
+- `test/wrapper.test.js` - Unit tests for wrapper functionality (NEW)
+- `test/integration.test.js` - End-to-end integration tests (NEW)
+- `examples/auto-wrap-example.md` - Auto-wrap usage walkthrough (NEW)
+- `README.md` - Update with auto-wrap instructions
+
+### Notes
+
+- Testing: Project uses Node.js built-in test runner (node --test)
+- Code style: ES modules (import/export), JSDoc comments for type hints
+- Patterns: Child process spawning with stdin/stdout piping, JSON-RPC message handling
+- Error handling: Graceful errors with actionable messages to stderr
+- Platform support: Must work on Linux, macOS, Windows (handle path separators, line endings)
+- All file operations use absolute paths (no relative paths)
+
+## Tasks
+
+- [x] 0.0 Create feature branch
+  - [x] 0.1 Create and checkout branch `feature/auto-wrap-governance`
+    - tdd: no
+    - verify: `git branch --show-current`
+
+- [x] 1.0 Implement Core Proxy (mcp-gov-proxy)
+  - [x] 1.1 Create bin/mcp-gov-proxy.js with CLI argument parsing (--target, --rules)
+    - tdd: yes
+    - verify: `node bin/mcp-gov-proxy.js --help` shows usage
+  - [x] 1.2 Implement subprocess spawning of target MCP server with stdin/stdout piping
+    - tdd: yes
+    - verify: Unit tests pass for subprocess management
+  - [x] 1.3 Implement JSON-RPC message interception for tools/call method
+    - tdd: yes
+    - verify: Unit tests pass for message parsing
+  - [x] 1.4 Integrate operation-detector.js to parse tool names and extract service/operation
+    - tdd: yes
+    - verify: Unit tests pass for tool name parsing
+  - [x] 1.5 Implement permission checking against rules.json (default to allow if not specified)
+    - tdd: yes
+    - verify: Unit tests pass for permission logic
+  - [x] 1.6 Implement error response for denied operations with "Permission denied" message
+    - tdd: yes
+    - verify: Unit tests verify error response format
+  - [x] 1.7 Implement message forwarding for allowed operations and non-tools/call messages
+    - tdd: yes
+    - verify: Unit tests verify pass-through behavior
+  - [x] 1.8 Implement audit logging to stderr with timestamp, tool name, service, operation
+    - tdd: yes
+    - verify: Unit tests verify audit log format
+  - [x] 1.9 Implement graceful error handling for target server crashes
+    - tdd: yes
+    - verify: Unit tests simulate target crash
+  - [x] 1.10 Add Unix shebang (#!/usr/bin/env node) for cross-platform compatibility
+    - tdd: no
+    - verify: `file bin/mcp-gov-proxy.js` shows executable script
+  - [x] 1.11 Verify: `node test/proxy.test.js` - all proxy unit tests pass
+
+- [ ] 2.0 Implement Generic Wrapper (mcp-gov-wrap)
+  - [ ] 2.1 Create bin/mcp-gov-wrap.js with CLI argument parsing (--config, --rules, --tool)
+    - tdd: yes
+    - verify: `node bin/mcp-gov-wrap.js --help` shows usage
+  - [ ] 2.2 Implement rules.json validation with descriptive error messages
+    - tdd: yes
+    - verify: Unit tests verify validation and error messages
+  - [ ] 2.3 Implement config file reading with format detection (Claude Code projects.mcpServers vs flat mcpServers)
+    - tdd: yes
+    - verify: Unit tests pass for both config formats
+  - [ ] 2.4 Implement unwrapped server detection (command field not containing mcp-gov-proxy)
+    - tdd: yes
+    - verify: Unit tests identify unwrapped servers
+  - [ ] 2.5 Implement server wrapping logic to replace command with mcp-gov-proxy invocation
+    - tdd: yes
+    - verify: Unit tests verify wrapped config structure
+  - [ ] 2.6 Preserve original server arguments and environment variables during wrapping
+    - tdd: yes
+    - verify: Unit tests verify args/env preservation
+  - [ ] 2.7 Create timestamped backup of config file before modifications (YYYYMMDD-HHMMSS format)
+    - tdd: yes
+    - verify: Unit tests verify backup creation
+  - [ ] 2.8 Implement detection of manual config edits and re-wrap only new/changed servers
+    - tdd: yes
+    - verify: Unit tests verify idempotency
+  - [ ] 2.9 Implement tool command execution using exec() after wrapping completes
+    - tdd: yes
+    - verify: Unit tests verify exec() call
+  - [ ] 2.10 Implement malformed config error handling with clear error messages
+    - tdd: yes
+    - verify: Unit tests verify error handling
+  - [ ] 2.11 Add Unix shebang (#!/usr/bin/env node) for cross-platform compatibility
+    - tdd: no
+    - verify: `file bin/mcp-gov-wrap.js` shows executable script
+  - [ ] 2.12 Verify: `node test/wrapper.test.js` - all wrapper unit tests pass
+
+- [ ] 3.0 Integration Testing with GitHub Example
+  - [ ] 3.1 Create test/integration.test.js for end-to-end testing
+    - tdd: yes
+    - verify: Test file exists and is executable
+  - [ ] 3.2 Write test: proxy blocks github_delete_repo with deny rule
+    - tdd: yes
+    - verify: Test passes - delete operation denied
+  - [ ] 3.3 Write test: proxy allows github_list_repos with allow rule
+    - tdd: yes
+    - verify: Test passes - list operation allowed
+  - [ ] 3.4 Write test: wrapper detects and wraps unwrapped GitHub server
+    - tdd: yes
+    - verify: Test passes - server wrapped correctly
+  - [ ] 3.5 Write test: audit logs appear in stderr with correct format
+    - tdd: yes
+    - verify: Test passes - logs contain all required fields
+  - [ ] 3.6 Write test: end-to-end flow (add server → wrap → block delete)
+    - tdd: yes
+    - verify: Test passes - complete workflow verified
+  - [ ] 3.7 Verify: `node --test test/integration.test.js` - all integration tests pass
+
+- [ ] 4.0 Package Configuration and Installation
+  - [ ] 4.1 Update package.json to add bin entries for mcp-gov-proxy and mcp-gov-wrap
+    - tdd: no
+    - verify: `npm ls` shows no errors
+  - [ ] 4.2 Add npm scripts for testing (test:proxy, test:wrapper, test:integration, test:all)
+    - tdd: no
+    - verify: `npm run test:all` executes all tests
+  - [ ] 4.3 Test global installation: npm install -g . and verify binary linking
+    - tdd: no
+    - verify: `which mcp-gov-proxy && which mcp-gov-wrap` show installed binaries
+  - [ ] 4.4 Test uninstall and reinstall to ensure clean state
+    - tdd: no
+    - verify: `npm uninstall -g mcp-gov && npm install -g .` succeeds
+  - [ ] 4.5 Verify: `npm run test:all` - all tests pass after installation
+
+- [ ] 5.0 Cross-Platform Compatibility
+  - [ ] 5.1 Test proxy on Linux with path separators and line endings
+    - tdd: no
+    - verify: All tests pass on Linux
+  - [ ] 5.2 Test wrapper on Linux with Unix-style commands
+    - tdd: no
+    - verify: Wrapper correctly handles Linux paths
+  - [ ] 5.3 Create test cases for Windows path handling (backslashes, drive letters)
+    - tdd: yes
+    - verify: Unit tests cover Windows path scenarios
+  - [ ] 5.4 Create test cases for macOS-specific behaviors
+    - tdd: yes
+    - verify: Unit tests cover macOS scenarios
+  - [ ] 5.5 Document platform-specific considerations in README
+    - tdd: no
+    - verify: README includes platform section
+  - [ ] 5.6 Verify: Manual test on macOS and Windows (if available) or document testing requirements
+
+- [ ] 6.0 Documentation and Examples
+  - [ ] 6.1 Create examples/auto-wrap-example.md with step-by-step walkthrough
+    - tdd: no
+    - verify: File exists with complete example
+  - [ ] 6.2 Document initial setup (installation, rules file creation, alias setup)
+    - tdd: no
+    - verify: README has Setup section with copy-paste commands
+  - [ ] 6.3 Document daily usage workflow (add server, run tool, view logs)
+    - tdd: no
+    - verify: README has Usage section with examples
+  - [ ] 6.4 Add troubleshooting section for common issues (missing rules.json, config errors, path issues)
+    - tdd: no
+    - verify: README has Troubleshooting section
+  - [ ] 6.5 Document rules file format with multiple service examples
+    - tdd: no
+    - verify: README explains rules.json structure
+  - [ ] 6.6 Add example for multiple MCP client tools (Claude Code, Droid)
+    - tdd: no
+    - verify: Examples directory contains multi-tool samples
+  - [ ] 6.7 Document audit log format and monitoring approach
+    - tdd: no
+    - verify: README explains audit logging
+  - [ ] 6.8 Create architecture diagram showing component interaction
+    - tdd: no
+    - verify: Diagram exists in docs or README
+  - [ ] 6.9 Verify: Documentation is complete and accurate by following walkthrough
+
+- [ ] 7.0 Final Testing and Validation
+  - [ ] 7.1 Run complete test suite: `npm run test:all`
+    - tdd: no
+    - verify: All tests pass (proxy, wrapper, integration)
+  - [ ] 7.2 Test with multiple services (GitHub, Google, Slack simulated)
+    - tdd: no
+    - verify: Multi-service config works correctly
+  - [ ] 7.3 Verify performance: measure overhead per tool call (<50ms target)
+    - tdd: no
+    - verify: Performance benchmark added to test suite
+  - [ ] 7.4 Verify idempotency: run wrapper multiple times, check no duplicate wrapping
+    - tdd: no
+    - verify: Multiple wrapper runs produce same result
+  - [ ] 7.5 Test error scenarios: missing rules, invalid config, target crash
+    - tdd: no
+    - verify: All error scenarios handled gracefully
+  - [ ] 7.6 Verify audit coverage: ensure 100% of denied operations logged
+    - tdd: no
+    - verify: Integration tests validate audit completeness
+  - [ ] 7.7 Test native tool workflow: `claude mcp add` followed by wrapper run
+    - tdd: no
+    - verify: Workflow succeeds without errors
+  - [ ] 7.8 Verify: `npm run test:all && npm run example:github` - all checks pass
