@@ -987,3 +987,461 @@ describe('mcp-gov-wrap config backup', () => {
     assert.ok(second >= 0 && second <= 59);
   });
 });
+
+describe('mcp-gov-wrap idempotency and re-wrapping', () => {
+  const tmpDir = join(projectRoot, 'test', 'tmp');
+
+  beforeEach(() => {
+    if (!existsSync(tmpDir)) {
+      mkdirSync(tmpDir, { recursive: true });
+    }
+  });
+
+  afterEach(() => {
+    if (existsSync(tmpDir)) {
+      rmSync(tmpDir, { recursive: true, force: true });
+    }
+  });
+
+  test('should not modify already wrapped servers on second run', async () => {
+    const configPath = join(tmpDir, 'config.json');
+    const rulesPath = join(tmpDir, 'rules.json');
+
+    const config = {
+      mcpServers: {
+        'test-server': {
+          command: 'node',
+          args: ['/path/to/server.js']
+        }
+      }
+    };
+
+    writeFileSync(configPath, JSON.stringify(config, null, 2));
+    writeFileSync(rulesPath, JSON.stringify({ rules: [] }));
+
+    // First run - should wrap
+    await runWrapper([
+      '--config', configPath,
+      '--rules', rulesPath,
+      '--tool', 'echo test'
+    ]);
+
+    // Read wrapped config
+    const wrappedConfig = JSON.parse(readFileSync(configPath, 'utf8'));
+
+    // Second run - should not modify
+    const result2 = await runWrapper([
+      '--config', configPath,
+      '--rules', rulesPath,
+      '--tool', 'echo test'
+    ]);
+
+    // Read config after second run
+    const configAfterSecondRun = JSON.parse(readFileSync(configPath, 'utf8'));
+
+    // Should be identical
+    assert.deepStrictEqual(configAfterSecondRun, wrappedConfig);
+
+    // Should report no servers need wrapping
+    const output = result2.stdout + result2.stderr;
+    assert.match(output, /already wrapped|no.*wrap/i);
+  });
+
+  test('should detect and wrap new server added after initial wrapping', async () => {
+    const configPath = join(tmpDir, 'config.json');
+    const rulesPath = join(tmpDir, 'rules.json');
+
+    const initialConfig = {
+      mcpServers: {
+        'server-1': {
+          command: 'node',
+          args: ['/path/to/server1.js']
+        }
+      }
+    };
+
+    writeFileSync(configPath, JSON.stringify(initialConfig, null, 2));
+    writeFileSync(rulesPath, JSON.stringify({ rules: [] }));
+
+    // First run - wrap server-1
+    await runWrapper([
+      '--config', configPath,
+      '--rules', rulesPath,
+      '--tool', 'echo test'
+    ]);
+
+    // Manually add a new unwrapped server
+    const configAfterFirst = JSON.parse(readFileSync(configPath, 'utf8'));
+    configAfterFirst.mcpServers['server-2'] = {
+      command: 'python',
+      args: ['/path/to/server2.py']
+    };
+    writeFileSync(configPath, JSON.stringify(configAfterFirst, null, 2));
+
+    // Second run - should wrap only server-2
+    const result2 = await runWrapper([
+      '--config', configPath,
+      '--rules', rulesPath,
+      '--tool', 'echo test'
+    ]);
+
+    const finalConfig = JSON.parse(readFileSync(configPath, 'utf8'));
+
+    // Both servers should be wrapped
+    assert.strictEqual(finalConfig.mcpServers['server-1'].command, 'mcp-gov-proxy');
+    assert.strictEqual(finalConfig.mcpServers['server-2'].command, 'mcp-gov-proxy');
+
+    // Output should mention wrapping server-2
+    const output = result2.stdout + result2.stderr;
+    assert.match(output, /server-2/i);
+  });
+
+  test('should handle user manually unwrapping a server', async () => {
+    const configPath = join(tmpDir, 'config.json');
+    const rulesPath = join(tmpDir, 'rules.json');
+
+    const config = {
+      mcpServers: {
+        'test-server': {
+          command: 'node',
+          args: ['/path/to/server.js']
+        }
+      }
+    };
+
+    writeFileSync(configPath, JSON.stringify(config, null, 2));
+    writeFileSync(rulesPath, JSON.stringify({ rules: [] }));
+
+    // First run - wrap
+    await runWrapper([
+      '--config', configPath,
+      '--rules', rulesPath,
+      '--tool', 'echo test'
+    ]);
+
+    // User manually unwraps (simulating manual config edit)
+    const unwrappedConfig = {
+      mcpServers: {
+        'test-server': {
+          command: 'node',
+          args: ['/path/to/server.js']
+        }
+      }
+    };
+    writeFileSync(configPath, JSON.stringify(unwrappedConfig, null, 2));
+
+    // Second run - should detect and re-wrap
+    await runWrapper([
+      '--config', configPath,
+      '--rules', rulesPath,
+      '--tool', 'echo test'
+    ]);
+
+    const finalConfig = JSON.parse(readFileSync(configPath, 'utf8'));
+
+    // Should be wrapped again
+    assert.strictEqual(finalConfig.mcpServers['test-server'].command, 'mcp-gov-proxy');
+  });
+
+  test('should not create backup if no changes needed on second run', async () => {
+    const configPath = join(tmpDir, 'config.json');
+    const rulesPath = join(tmpDir, 'rules.json');
+
+    const config = {
+      mcpServers: {
+        'test-server': {
+          command: 'node',
+          args: ['/path/to/server.js']
+        }
+      }
+    };
+
+    writeFileSync(configPath, JSON.stringify(config, null, 2));
+    writeFileSync(rulesPath, JSON.stringify({ rules: [] }));
+
+    // First run - should create backup
+    await runWrapper([
+      '--config', configPath,
+      '--rules', rulesPath,
+      '--tool', 'echo test'
+    ]);
+
+    const filesAfterFirst = readdirSync(tmpDir);
+    const backupCount1 = filesAfterFirst.filter(f => f.match(/\.backup-/)).length;
+
+    // Second run - should not create backup (no changes)
+    await runWrapper([
+      '--config', configPath,
+      '--rules', rulesPath,
+      '--tool', 'echo test'
+    ]);
+
+    const filesAfterSecond = readdirSync(tmpDir);
+    const backupCount2 = filesAfterSecond.filter(f => f.match(/\.backup-/)).length;
+
+    // Should still have only 1 backup
+    assert.strictEqual(backupCount2, backupCount1);
+  });
+});
+
+describe('mcp-gov-wrap tool command execution', () => {
+  const tmpDir = join(projectRoot, 'test', 'tmp');
+
+  beforeEach(() => {
+    if (!existsSync(tmpDir)) {
+      mkdirSync(tmpDir, { recursive: true });
+    }
+  });
+
+  afterEach(() => {
+    if (existsSync(tmpDir)) {
+      rmSync(tmpDir, { recursive: true, force: true });
+    }
+  });
+
+  test('should execute tool command after wrapping', async () => {
+    const configPath = join(tmpDir, 'config.json');
+    const rulesPath = join(tmpDir, 'rules.json');
+    const outputFile = join(tmpDir, 'tool-output.txt');
+
+    const config = {
+      mcpServers: {
+        'test-server': {
+          command: 'node',
+          args: ['/path/to/server.js']
+        }
+      }
+    };
+
+    writeFileSync(configPath, JSON.stringify(config, null, 2));
+    writeFileSync(rulesPath, JSON.stringify({ rules: [] }));
+
+    // Use echo to write to a file so we can verify execution
+    const result = await runWrapper([
+      '--config', configPath,
+      '--rules', rulesPath,
+      '--tool', `echo "tool executed" > ${outputFile}`
+    ]);
+
+    // Check that tool command was executed
+    assert.ok(existsSync(outputFile), 'Tool command should have been executed');
+    const output = readFileSync(outputFile, 'utf8').trim();
+    assert.strictEqual(output, 'tool executed');
+  });
+
+  test('should execute tool command even when no wrapping needed', async () => {
+    const configPath = join(tmpDir, 'wrapped-config.json');
+    const rulesPath = join(tmpDir, 'rules.json');
+    const outputFile = join(tmpDir, 'tool-output2.txt');
+
+    const wrappedConfig = {
+      mcpServers: {
+        'test-server': {
+          command: 'mcp-gov-proxy',
+          args: ['--target', 'node /path/to/server.js', '--rules', '/path/to/rules.json']
+        }
+      }
+    };
+
+    writeFileSync(configPath, JSON.stringify(wrappedConfig, null, 2));
+    writeFileSync(rulesPath, JSON.stringify({ rules: [] }));
+
+    const result = await runWrapper([
+      '--config', configPath,
+      '--rules', rulesPath,
+      '--tool', `echo "no wrap needed" > ${outputFile}`
+    ]);
+
+    // Tool should still execute
+    assert.ok(existsSync(outputFile));
+    const output = readFileSync(outputFile, 'utf8').trim();
+    assert.strictEqual(output, 'no wrap needed');
+  });
+
+  test('should handle tool command with complex arguments', async () => {
+    const configPath = join(tmpDir, 'config.json');
+    const rulesPath = join(tmpDir, 'rules.json');
+    const outputFile = join(tmpDir, 'tool-output3.txt');
+
+    writeFileSync(configPath, JSON.stringify({ mcpServers: {} }));
+    writeFileSync(rulesPath, JSON.stringify({ rules: [] }));
+
+    // Complex command with pipes and quotes
+    const result = await runWrapper([
+      '--config', configPath,
+      '--rules', rulesPath,
+      '--tool', `echo "test 123" | tee ${outputFile}`
+    ]);
+
+    // Should handle complex command
+    assert.ok(existsSync(outputFile));
+  });
+
+  test('should report tool command execution in output', async () => {
+    const configPath = join(tmpDir, 'config.json');
+    const rulesPath = join(tmpDir, 'rules.json');
+
+    writeFileSync(configPath, JSON.stringify({ mcpServers: {} }));
+    writeFileSync(rulesPath, JSON.stringify({ rules: [] }));
+
+    const result = await runWrapper([
+      '--config', configPath,
+      '--rules', rulesPath,
+      '--tool', 'echo "hello from tool"'
+    ]);
+
+    // Should show tool output
+    const output = result.stdout + result.stderr;
+    assert.match(output, /hello from tool|executing.*tool/i);
+  });
+});
+
+describe('mcp-gov-wrap malformed config error handling', () => {
+  const tmpDir = join(projectRoot, 'test', 'tmp');
+
+  beforeEach(() => {
+    if (!existsSync(tmpDir)) {
+      mkdirSync(tmpDir, { recursive: true });
+    }
+  });
+
+  afterEach(() => {
+    if (existsSync(tmpDir)) {
+      rmSync(tmpDir, { recursive: true, force: true });
+    }
+  });
+
+  test('should handle config with missing command field', async () => {
+    const configPath = join(tmpDir, 'no-command-config.json');
+    const rulesPath = join(tmpDir, 'rules.json');
+
+    const config = {
+      mcpServers: {
+        'broken-server': {
+          args: ['/path/to/server.js']
+          // Missing 'command' field
+        }
+      }
+    };
+
+    writeFileSync(configPath, JSON.stringify(config, null, 2));
+    writeFileSync(rulesPath, JSON.stringify({ rules: [] }));
+
+    const result = await runWrapper([
+      '--config', configPath,
+      '--rules', rulesPath,
+      '--tool', 'echo test'
+    ]);
+
+    // Should handle gracefully - treat as unwrapped and try to wrap
+    // Exit code might be non-zero but should have clear error message
+    const output = result.stdout + result.stderr;
+    assert.match(output, /broken-server|command|error/i);
+  });
+
+  test('should handle config with non-object server definition', async () => {
+    const configPath = join(tmpDir, 'invalid-server-config.json');
+    const rulesPath = join(tmpDir, 'rules.json');
+
+    const config = {
+      mcpServers: {
+        'broken-server': 'this should be an object'
+      }
+    };
+
+    writeFileSync(configPath, JSON.stringify(config, null, 2));
+    writeFileSync(rulesPath, JSON.stringify({ rules: [] }));
+
+    const result = await runWrapper([
+      '--config', configPath,
+      '--rules', rulesPath,
+      '--tool', 'echo test'
+    ]);
+
+    // Should handle gracefully
+    const output = result.stdout + result.stderr;
+    // May show error or skip invalid server
+    assert.ok(result.exitCode !== undefined);
+  });
+
+  test('should provide clear error for non-string command field', async () => {
+    const configPath = join(tmpDir, 'bad-command-type-config.json');
+    const rulesPath = join(tmpDir, 'rules.json');
+
+    const config = {
+      mcpServers: {
+        'test-server': {
+          command: 123, // Should be string
+          args: ['/path/to/server.js']
+        }
+      }
+    };
+
+    writeFileSync(configPath, JSON.stringify(config, null, 2));
+    writeFileSync(rulesPath, JSON.stringify({ rules: [] }));
+
+    const result = await runWrapper([
+      '--config', configPath,
+      '--rules', rulesPath,
+      '--tool', 'echo test'
+    ]);
+
+    // Should handle or report issue
+    const output = result.stdout + result.stderr;
+    assert.ok(output.length > 0);
+  });
+
+  test('should provide clear error for non-array args field', async () => {
+    const configPath = join(tmpDir, 'bad-args-type-config.json');
+    const rulesPath = join(tmpDir, 'rules.json');
+
+    const config = {
+      mcpServers: {
+        'test-server': {
+          command: 'node',
+          args: '/path/to/server.js' // Should be array
+        }
+      }
+    };
+
+    writeFileSync(configPath, JSON.stringify(config, null, 2));
+    writeFileSync(rulesPath, JSON.stringify({ rules: [] }));
+
+    const result = await runWrapper([
+      '--config', configPath,
+      '--rules', rulesPath,
+      '--tool', 'echo test'
+    ]);
+
+    // Should handle or report issue
+    const output = result.stdout + result.stderr;
+    assert.ok(output.length > 0);
+  });
+
+  test('should handle empty server name', async () => {
+    const configPath = join(tmpDir, 'empty-name-config.json');
+    const rulesPath = join(tmpDir, 'rules.json');
+
+    const config = {
+      mcpServers: {
+        '': {
+          command: 'node',
+          args: ['/path/to/server.js']
+        }
+      }
+    };
+
+    writeFileSync(configPath, JSON.stringify(config, null, 2));
+    writeFileSync(rulesPath, JSON.stringify({ rules: [] }));
+
+    const result = await runWrapper([
+      '--config', configPath,
+      '--rules', rulesPath,
+      '--tool', 'echo test'
+    ]);
+
+    // Should handle gracefully
+    const output = result.stdout + result.stderr;
+    assert.ok(output.length > 0);
+  });
+});

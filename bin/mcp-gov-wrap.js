@@ -400,8 +400,31 @@ async function main() {
     }
   }
 
-  // TODO: Execute tool command (subtask 2.9)
-  console.log(`\nTool command: ${args.tool}`);
+  // Execute tool command
+  console.log(`\nExecuting tool command: ${args.tool}`);
+  try {
+    const { stdout, stderr } = await execAsync(args.tool, {
+      shell: true,
+      encoding: 'utf8'
+    });
+
+    if (stdout) {
+      console.log(stdout);
+    }
+    if (stderr) {
+      console.error(stderr);
+    }
+  } catch (error) {
+    // exec throws on non-zero exit codes, but we still want to show output
+    if (error.stdout) {
+      console.log(error.stdout);
+    }
+    if (error.stderr) {
+      console.error(error.stderr);
+    }
+    console.error(`\nTool command exited with code ${error.code || 'unknown'}`);
+    process.exit(error.code || 1);
+  }
 }
 
 main().catch(error => {

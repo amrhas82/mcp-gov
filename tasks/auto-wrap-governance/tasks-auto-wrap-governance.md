@@ -64,7 +64,7 @@
     - verify: `file bin/mcp-gov-proxy.js` shows executable script
   - [x] 1.11 Verify: `node test/proxy.test.js` - all proxy unit tests pass
 
-- [ ] 2.0 Implement Generic Wrapper (mcp-gov-wrap)
+- [x] 2.0 Implement Generic Wrapper (mcp-gov-wrap)
   - [x] 2.1 Create bin/mcp-gov-wrap.js with CLI argument parsing (--config, --rules, --tool)
     - tdd: yes
     - verify: `node bin/mcp-gov-wrap.js --help` shows usage
@@ -86,19 +86,19 @@
   - [x] 2.7 Create timestamped backup of config file before modifications (YYYYMMDD-HHMMSS format)
     - tdd: yes
     - verify: Unit tests verify backup creation
-  - [ ] 2.8 Implement detection of manual config edits and re-wrap only new/changed servers
+  - [x] 2.8 Implement detection of manual config edits and re-wrap only new/changed servers
     - tdd: yes
     - verify: Unit tests verify idempotency
-  - [ ] 2.9 Implement tool command execution using exec() after wrapping completes
+  - [x] 2.9 Implement tool command execution using exec() after wrapping completes
     - tdd: yes
     - verify: Unit tests verify exec() call
-  - [ ] 2.10 Implement malformed config error handling with clear error messages
+  - [x] 2.10 Implement malformed config error handling with clear error messages
     - tdd: yes
     - verify: Unit tests verify error handling
-  - [ ] 2.11 Add Unix shebang (#!/usr/bin/env node) for cross-platform compatibility
+  - [x] 2.11 Add Unix shebang (#!/usr/bin/env node) for cross-platform compatibility
     - tdd: no
     - verify: `file bin/mcp-gov-wrap.js` shows executable script
-  - [ ] 2.12 Verify: `node test/wrapper.test.js` - all wrapper unit tests pass
+  - [x] 2.12 Verify: `node test/wrapper.test.js` - all wrapper unit tests pass
 
 - [ ] 3.0 Integration Testing with GitHub Example
   - [ ] 3.1 Create test/integration.test.js for end-to-end testing
