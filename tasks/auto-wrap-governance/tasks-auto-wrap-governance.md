@@ -100,26 +100,26 @@
     - verify: `file bin/mcp-gov-wrap.js` shows executable script
   - [x] 2.12 Verify: `node test/wrapper.test.js` - all wrapper unit tests pass
 
-- [ ] 3.0 Integration Testing with GitHub Example
-  - [ ] 3.1 Create test/integration.test.js for end-to-end testing
+- [x] 3.0 Integration Testing with GitHub Example
+  - [x] 3.1 Create test/integration.test.js for end-to-end testing
     - tdd: yes
     - verify: Test file exists and is executable
-  - [ ] 3.2 Write test: proxy blocks github_delete_repo with deny rule
+  - [x] 3.2 Write test: proxy blocks github_delete_repo with deny rule
     - tdd: yes
     - verify: Test passes - delete operation denied
-  - [ ] 3.3 Write test: proxy allows github_list_repos with allow rule
+  - [x] 3.3 Write test: proxy allows github_list_repos with allow rule
     - tdd: yes
     - verify: Test passes - list operation allowed
-  - [ ] 3.4 Write test: wrapper detects and wraps unwrapped GitHub server
+  - [x] 3.4 Write test: wrapper detects and wraps unwrapped GitHub server
     - tdd: yes
     - verify: Test passes - server wrapped correctly
-  - [ ] 3.5 Write test: audit logs appear in stderr with correct format
+  - [x] 3.5 Write test: audit logs appear in stderr with correct format
     - tdd: yes
     - verify: Test passes - logs contain all required fields
-  - [ ] 3.6 Write test: end-to-end flow (add server → wrap → block delete)
+  - [x] 3.6 Write test: end-to-end flow (add server → wrap → block delete)
     - tdd: yes
     - verify: Test passes - complete workflow verified
-  - [ ] 3.7 Verify: `node --test test/integration.test.js` - all integration tests pass
+  - [x] 3.7 Verify: `node --test test/integration.test.js` - all integration tests pass
 
 - [ ] 4.0 Package Configuration and Installation
   - [ ] 4.1 Update package.json to add bin entries for mcp-gov-proxy and mcp-gov-wrap
