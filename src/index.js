@@ -9,12 +9,33 @@ import { CallToolRequestSchema, ListToolsRequestSchema } from '@modelcontextprot
 import { parseToolName } from './operation-detector.js';
 
 /**
+ * @typedef {Object} ServerConfig
+ * @property {string} name - Server name
+ * @property {string} version - Server version
+ */
+
+/**
+ * @typedef {Object.<string, Object.<string, 'allow'|'deny'>>} PermissionRules
+ */
+
+/**
+ * @typedef {Object} ToolDefinition
+ * @property {string} name - Tool name
+ * @property {string} description - Tool description
+ * @property {Object} inputSchema - JSON Schema for input
+ */
+
+/**
+ * @typedef {function(any): Promise<Object>} ToolHandler
+ */
+
+/**
  * MCP Server with governance layer for permission control and audit logging.
  */
 export class GovernedMCPServer {
   /**
-   * @param {object} config - Server configuration {name, version}
-   * @param {object} rules - Permission rules {serviceName: {operation: 'allow'|'deny'}}
+   * @param {ServerConfig} config - Server configuration {name, version}
+   * @param {PermissionRules} rules - Permission rules {serviceName: {operation: 'allow'|'deny'}}
    */
   constructor(config, rules = {}) {
     this.config = config;
@@ -94,12 +115,13 @@ export class GovernedMCPServer {
         this.logOperation(toolName, args, 'success');
         return result;
       } catch (error) {
-        this.logOperation(toolName, args, 'error', error.message);
+        const errorMessage = error instanceof Error ? error.message : String(error);
+        this.logOperation(toolName, args, 'error', errorMessage);
         return {
           content: [
             {
               type: 'text',
-              text: `Error: ${error.message}`
+              text: `Error: ${errorMessage}`
             }
           ],
           isError: true
@@ -135,7 +157,7 @@ export class GovernedMCPServer {
   /**
    * Log operation to stderr as structured JSON.
    * @param {string} tool - Tool name
-   * @param {string} args - Arguments (will be truncated to 200 chars)
+   * @param {Object|string} args - Arguments (will be truncated to 200 chars)
    * @param {string} status - Status: 'allowed', 'denied', 'success', 'error'
    * @param {string} detail - Optional detail message
    */
@@ -156,8 +178,8 @@ export class GovernedMCPServer {
 
   /**
    * Register a tool with governance wrapper.
-   * @param {object} toolDef - Tool definition {name, description, inputSchema}
-   * @param {function} handler - Async handler function
+   * @param {ToolDefinition} toolDef - Tool definition {name, description, inputSchema}
+   * @param {ToolHandler} handler - Async handler function
    */
   registerTool(toolDef, handler) {
     this.tools.set(toolDef.name, {

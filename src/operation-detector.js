@@ -6,6 +6,10 @@
 import { OPERATION_KEYWORDS } from './operation-keywords.js';
 
 /**
+ * @typedef {'admin'|'delete'|'execute'|'write'|'read'} OperationType
+ */
+
+/**
  * Extract service name from tool name prefix (e.g., "github_list_repos" → "github")
  * @param {string} toolName - Full tool name
  * @returns {string} Service name or "unknown"
@@ -24,7 +28,7 @@ export function extractService(toolName) {
  * Detect operation type from tool name using priority-based keyword matching.
  * Priority order: admin → delete → execute → write → read
  * @param {string} toolName - Tool name to analyze
- * @returns {string} Operation type: 'admin', 'delete', 'execute', 'write', 'read', or 'write' (default)
+ * @returns {OperationType} Operation type: 'admin', 'delete', 'execute', 'write', 'read', or 'write' (default)
  */
 export function detectOperation(toolName) {
   if (!toolName || typeof toolName !== 'string') {
@@ -34,10 +38,11 @@ export function detectOperation(toolName) {
   const lowerName = toolName.toLowerCase();
 
   // Check keywords in priority order
+  /** @type {OperationType[]} */
   const operationTypes = ['admin', 'delete', 'execute', 'write', 'read'];
 
   for (const opType of operationTypes) {
-    const keywords = OPERATION_KEYWORDS[opType];
+    const keywords = /** @type {Record<OperationType, string[]>} */ (OPERATION_KEYWORDS)[opType];
     for (const keyword of keywords) {
       if (lowerName.includes(keyword)) {
         return opType;
@@ -52,7 +57,7 @@ export function detectOperation(toolName) {
 /**
  * Parse tool name into service and operation components.
  * @param {string} toolName - Full tool name
- * @returns {{service: string, operation: string}} Parsed components
+ * @returns {{service: string, operation: OperationType}} Parsed components
  */
 export function parseToolName(toolName) {
   return {

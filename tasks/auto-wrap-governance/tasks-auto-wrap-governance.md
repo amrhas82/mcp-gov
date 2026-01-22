@@ -65,25 +65,25 @@
   - [x] 1.11 Verify: `node test/proxy.test.js` - all proxy unit tests pass
 
 - [ ] 2.0 Implement Generic Wrapper (mcp-gov-wrap)
-  - [ ] 2.1 Create bin/mcp-gov-wrap.js with CLI argument parsing (--config, --rules, --tool)
+  - [x] 2.1 Create bin/mcp-gov-wrap.js with CLI argument parsing (--config, --rules, --tool)
     - tdd: yes
     - verify: `node bin/mcp-gov-wrap.js --help` shows usage
-  - [ ] 2.2 Implement rules.json validation with descriptive error messages
+  - [x] 2.2 Implement rules.json validation with descriptive error messages
     - tdd: yes
     - verify: Unit tests verify validation and error messages
-  - [ ] 2.3 Implement config file reading with format detection (Claude Code projects.mcpServers vs flat mcpServers)
+  - [x] 2.3 Implement config file reading with format detection (Claude Code projects.mcpServers vs flat mcpServers)
     - tdd: yes
     - verify: Unit tests pass for both config formats
-  - [ ] 2.4 Implement unwrapped server detection (command field not containing mcp-gov-proxy)
+  - [x] 2.4 Implement unwrapped server detection (command field not containing mcp-gov-proxy)
     - tdd: yes
     - verify: Unit tests identify unwrapped servers
-  - [ ] 2.5 Implement server wrapping logic to replace command with mcp-gov-proxy invocation
+  - [x] 2.5 Implement server wrapping logic to replace command with mcp-gov-proxy invocation
     - tdd: yes
     - verify: Unit tests verify wrapped config structure
-  - [ ] 2.6 Preserve original server arguments and environment variables during wrapping
+  - [x] 2.6 Preserve original server arguments and environment variables during wrapping
     - tdd: yes
     - verify: Unit tests verify args/env preservation
-  - [ ] 2.7 Create timestamped backup of config file before modifications (YYYYMMDD-HHMMSS format)
+  - [x] 2.7 Create timestamped backup of config file before modifications (YYYYMMDD-HHMMSS format)
     - tdd: yes
     - verify: Unit tests verify backup creation
   - [ ] 2.8 Implement detection of manual config edits and re-wrap only new/changed servers

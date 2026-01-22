@@ -69,6 +69,9 @@ server.registerTool(
       }
     }
   },
+  /**
+   * @param {{ visibility?: string, sort?: string }} args
+   */
   async (args) => {
     const params = {
       visibility: args.visibility || 'all',
@@ -81,7 +84,7 @@ server.registerTool(
       params
     });
 
-    const repos = response.data.map(repo => ({
+    const repos = /** @type {any[]} */ (response.data).map((/** @type {any} */ repo) => ({
       name: repo.name,
       full_name: repo.full_name,
       private: repo.private,
@@ -95,7 +98,7 @@ server.registerTool(
         {
           type: 'text',
           text: `Found ${repos.length} repositories:\n\n` +
-                repos.map(r => `- ${r.full_name}${r.private ? ' (private)' : ''}\n  ${r.description || 'No description'}\n  ${r.url}`).join('\n\n')
+                repos.map((/** @type {any} */ r) => `- ${r.full_name}${r.private ? ' (private)' : ''}\n  ${r.description || 'No description'}\n  ${r.url}`).join('\n\n')
         }
       ]
     };
@@ -118,6 +121,9 @@ server.registerTool(
       required: ['repo_name']
     }
   },
+  /**
+   * @param {{ repo_name: string }} args
+   */
   async (args) => {
     // First get authenticated user to construct full repo path
     const userResponse = await axios.get(`${GITHUB_API}/user`, { headers });

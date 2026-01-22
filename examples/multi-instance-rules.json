@@ -1,0 +1,46 @@
+{
+  "_comment": "Multi-level governance rules example",
+
+  "github": {
+    "_comment": "Default service-level rules (applies to all GitHub servers unless overridden)",
+    "read": "allow",
+    "write": "allow",
+    "delete": "deny",
+    "execute": "allow",
+    "admin": "deny"
+  },
+
+  "servers": {
+    "_comment": "Server-instance-level rules (specific to each MCP server by name)",
+
+    "github-prod": {
+      "github": {
+        "read": "allow",
+        "write": "deny",
+        "delete": "deny",
+        "execute": "deny",
+        "admin": "deny"
+      }
+    },
+
+    "github-dev": {
+      "github": {
+        "read": "allow",
+        "write": "allow",
+        "delete": "allow",
+        "execute": "allow",
+        "admin": "deny"
+      }
+    },
+
+    "github-personal": {
+      "github": {
+        "read": "allow",
+        "write": "allow",
+        "delete": "deny",
+        "execute": "allow",
+        "admin": "deny"
+      }
+    }
+  }
+}
