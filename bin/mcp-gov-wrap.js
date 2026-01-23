@@ -243,11 +243,12 @@ function detectUnwrappedServers(mcpServers) {
 
 /**
  * Wrap a server configuration with mcp-gov-proxy
+ * @param {string} serverName - Name of the server (key in mcpServers)
  * @param {Object} serverConfig - Original server configuration
  * @param {string} rulesPath - Absolute path to rules.json
  * @returns {Object} Wrapped server configuration
  */
-function wrapServer(serverConfig, rulesPath) {
+function wrapServer(serverName, serverConfig, rulesPath) {
   // Build target command from original config
   let targetCommand = serverConfig.command || '';
 
@@ -262,6 +263,7 @@ function wrapServer(serverConfig, rulesPath) {
   const wrappedConfig = {
     command: 'mcp-gov-proxy',
     args: [
+      '--service', serverName,
       '--target', targetCommand,
       '--rules', rulesPath
     ],
@@ -324,7 +326,7 @@ function wrapServers(config, unwrappedNames, rulesPath) {
   // Wrap each unwrapped server
   for (const serverName of unwrappedNames) {
     const originalConfig = mcpServers[serverName];
-    mcpServers[serverName] = wrapServer(originalConfig, rulesPath);
+    mcpServers[serverName] = wrapServer(serverName, originalConfig, rulesPath);
   }
 
   return modifiedConfig;
@@ -712,7 +714,7 @@ async function main() {
         // Wrap unwrapped servers in this project
         for (const serverName of unwrapped) {
           const originalConfig = targetServers[serverName];
-          targetServers[serverName] = wrapServer(originalConfig, absoluteRulesPath);
+          targetServers[serverName] = wrapServer(serverName, originalConfig, absoluteRulesPath);
         }
       }
     }

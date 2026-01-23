@@ -13,12 +13,16 @@ import { extractService, detectOperation } from '../src/operation-detector.js';
 
 /**
  * Parse command line arguments
- * @returns {{ target: string, rules: string, help: boolean }}
+ * @returns {{ target: string, rules: string, service: string, help: boolean }}
  */
 function parseCliArgs() {
   try {
     const { values } = parseArgs({
       options: {
+        service: {
+          type: 'string',
+          short: 's',
+        },
         target: {
           type: 'string',
           short: 't',
@@ -47,9 +51,10 @@ function parseCliArgs() {
  */
 function showUsage() {
   console.log(`
-Usage: mcp-gov-proxy --target <command> --rules <rules.json>
+Usage: mcp-gov-proxy [--service <name>] --target <command> --rules <rules.json>
 
 Options:
+  --service, -s  Service name for rule matching (recommended, falls back to tool name prefix)
   --target, -t   Target MCP server command to wrap (required)
   --rules, -r    Path to rules.json file (required)
   --help, -h     Show this help message
@@ -58,9 +63,12 @@ Description:
   Intercepts MCP tool calls and checks permissions before forwarding to target server.
   Provides audit logging and permission control based on rules.json.
 
+  IMPORTANT: Use --service to ensure correct rule matching. Without it, the service
+  name is extracted from tool name prefixes, which may not match your rules.
+
 Examples:
-  mcp-gov-proxy --target "node server.js" --rules rules.json
-  mcp-gov-proxy -t "npx github-mcp" -r ./config/rules.json
+  mcp-gov-proxy --service filesystem --target "npx -y @modelcontextprotocol/server-filesystem" --rules rules.json
+  mcp-gov-proxy -s github -t "npx github-mcp" -r ./config/rules.json
 `);
 }
 
@@ -160,10 +168,11 @@ function logAudit(toolName, service, operation, allowed) {
 
 /**
  * Start the proxy server
+ * @param {string} serviceName - Service name for rule matching
  * @param {string} targetCommand - Command to spawn target MCP server
  * @param {string} rulesPath - Path to rules.json file
  */
-function startProxy(targetCommand, rulesPath) {
+function startProxy(serviceName, targetCommand, rulesPath) {
   // Load rules file
   const rules = loadRules(rulesPath);
 
@@ -213,8 +222,8 @@ function startProxy(targetCommand, rulesPath) {
       const toolName = message.params?.name;
 
       if (toolName) {
-        // Detect service and operation
-        const service = extractService(toolName);
+        // Use provided service name, fallback to extracting from tool name for backward compatibility
+        const service = serviceName || extractService(toolName);
         const operation = detectOperation(toolName);
 
         // Check permissions
@@ -289,7 +298,7 @@ function main() {
     process.exit(1);
   }
 
-  startProxy(args.target, args.rules);
+  startProxy(args.service, args.target, args.rules);
 }
 
 main();

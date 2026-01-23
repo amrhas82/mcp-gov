@@ -164,7 +164,8 @@ The underlying proxy used by `mcp-gov-wrap`. Normally you don't call this direct
 
 ```bash
 mcp-gov-proxy \
-  --target "npx -y @modelcontextprotocol/server-github" \
+  --service filesystem \
+  --target "npx -y @modelcontextprotocol/server-filesystem" \
   --rules ~/.mcp-gov/rules.json
 ```
 
@@ -173,6 +174,13 @@ mcp-gov-proxy \
 - Checks permissions against rules
 - Allows or denies operations
 - Logs all operations to stderr (structured JSON)
+
+**Parameters:**
+- `--service` (recommended): Service name for rule matching (e.g., "filesystem", "github")
+- `--target` (required): Command to spawn the target MCP server
+- `--rules` (required): Path to rules.json file
+
+**Important:** When wrapping with `mcp-gov-wrap`, the `--service` parameter is automatically added using the server name from your config (e.g., `mcpServers.filesystem` → `--service filesystem`). This ensures governance rules match correctly.
 
 This command is automatically invoked by `mcp-gov-wrap` - you typically don't need to use it directly.
 
@@ -1007,6 +1015,7 @@ jq -r "select(.status==\"denied\") | \"\(.timestamp) \(.tool)\"" ~/.mcp-gov/audi
 │      "github": {                                              │
 │        "command": "mcp-gov-proxy",                            │
 │        "args": [                                              │
+│          "--service", "github",                               │
 │          "--target", "npx -y @modelcontextprotocol/...",     │
 │          "--rules", "/home/user/.mcp-gov/rules.json"         │
 │        ]                                                      │
