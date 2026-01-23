@@ -254,7 +254,7 @@ function startProxy(serviceName, targetCommand, rulesPath) {
           // Denied - send error response
           const errorResponse = createErrorResponse(
             message.id,
-            `Permission denied: ${service}.${operation} operation on tool ${toolName}`
+            `[MCP-GOV] Permission denied: ${service}.${operation} operation on tool ${toolName}`
           );
           console.log(errorResponse);
         }

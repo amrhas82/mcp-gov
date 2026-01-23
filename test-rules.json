@@ -1,0 +1,23 @@
+{
+  "_comment": "Test rules - proxy format",
+  "services": {
+    "filesystem": {
+      "operations": {
+        "read": "deny",
+        "write": "allow",
+        "delete": "deny",
+        "execute": "deny",
+        "admin": "deny"
+      }
+    },
+    "github": {
+      "operations": {
+        "read": "allow",
+        "write": "allow",
+        "delete": "deny",
+        "execute": "deny",
+        "admin": "deny"
+      }
+    }
+  }
+}

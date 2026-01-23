@@ -1,0 +1,44 @@
+{
+  "mcpServers": {
+    "filesystem": {
+      "command": "mcp-gov-proxy",
+      "args": [
+        "--service",
+        "filesystem",
+        "--target",
+        "npx -y @modelcontextprotocol/server-filesystem /tmp",
+        "--rules",
+        "/home/hamr/PycharmProjects/mcp-gov/test-rules.json"
+      ],
+      "_original": {
+        "command": "npx",
+        "args": [
+          "-y",
+          "@modelcontextprotocol/server-filesystem",
+          "/tmp"
+        ]
+      }
+    },
+    "github": {
+      "command": "mcp-gov-proxy",
+      "args": [
+        "--service",
+        "github",
+        "--target",
+        "npx -y @modelcontextprotocol/server-github",
+        "--rules",
+        "/home/hamr/PycharmProjects/mcp-gov/test-rules.json"
+      ],
+      "_original": {
+        "command": "npx",
+        "args": [
+          "-y",
+          "@modelcontextprotocol/server-github"
+        ]
+      },
+      "env": {
+        "GITHUB_TOKEN": "test-token"
+      }
+    }
+  }
+}
