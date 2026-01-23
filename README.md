@@ -19,6 +19,201 @@ cd mcp-gov
 
 # Install dependencies
 npm install
+
+# Install globally for CLI tools (optional)
+npm install -g .
+```
+
+## Auto-Wrap Setup (Recommended)
+
+The easiest way to add governance to existing MCP servers is using the auto-wrap CLI tools.
+
+### 1. Install CLI Tools
+
+```bash
+# Install globally
+npm install -g .
+
+# Verify installation
+which mcp-gov-proxy
+which mcp-gov-wrap
+```
+
+### 2. Create Rules File
+
+Create `~/.mcp-gov/rules.json` with your governance rules:
+
+```bash
+mkdir -p ~/.mcp-gov
+
+cat > ~/.mcp-gov/rules.json << 'EOF'
+{
+  "rules": [
+    {
+      "service": "github",
+      "operations": ["delete", "admin"],
+      "permission": "deny",
+      "reason": "Destructive operations require manual approval"
+    },
+    {
+      "service": "github",
+      "operations": ["read", "write"],
+      "permission": "allow"
+    }
+  ]
+}
+EOF
+```
+
+### 3. Add MCP Servers (Native Command)
+
+Use your MCP client's native command to add servers:
+
+```bash
+# Example with Claude Code
+claude mcp add github --command "npx" --args "-y @modelcontextprotocol/server-github"
+
+# Example with Droid
+droid mcp add github --command "npx" --args "-y @modelcontextprotocol/server-github"
+```
+
+### 4. Wrap Servers and Launch
+
+Use `mcp-gov-wrap` to automatically add governance to all servers:
+
+```bash
+# Wrap servers in Claude Code config and launch
+mcp-gov-wrap \
+  --config ~/.config/claude/config.json \
+  --rules ~/.mcp-gov/rules.json \
+  --tool "claude chat"
+
+# Or create an alias for convenience
+alias claude-gov='mcp-gov-wrap --config ~/.config/claude/config.json --rules ~/.mcp-gov/rules.json --tool "claude chat"'
+
+# Then just run:
+claude-gov
+```
+
+### 5. Daily Usage
+
+Once set up, your workflow is simple:
+
+```bash
+# Add a new server using native command
+claude mcp add new-server --command "node" --args "server.js"
+
+# Launch with governance (automatically wraps new servers)
+claude-gov
+```
+
+The wrapper:
+- Detects unwrapped servers automatically
+- Creates a timestamped backup before changes
+- Wraps servers with the governance proxy
+- Launches your client tool
+- Never double-wraps (idempotent)
+
+See [examples/auto-wrap-example.md](examples/auto-wrap-example.md) for a complete walkthrough.
+
+## Usage
+
+### Adding New Servers
+
+When you want to add a new MCP server, use your client's native command:
+
+```bash
+# Add server with native command
+claude mcp add my-server --command "node" --args "/path/to/server.js"
+
+# Launch with wrapper to automatically add governance
+mcp-gov-wrap \
+  --config ~/.config/claude/config.json \
+  --rules ~/.mcp-gov/rules.json \
+  --tool "claude chat"
+```
+
+The wrapper detects the new server and wraps it automatically.
+
+### Viewing Audit Logs
+
+Audit logs are written to stderr in JSON format. Capture them for monitoring:
+
+```bash
+# Redirect stderr to a log file
+mcp-gov-wrap \
+  --config ~/.config/claude/config.json \
+  --rules ~/.mcp-gov/rules.json \
+  --tool "claude chat" \
+  2>> ~/.mcp-gov/audit.log
+
+# In another terminal, monitor logs in real-time
+tail -f ~/.mcp-gov/audit.log | jq '.'
+```
+
+Example audit log entries:
+
+```json
+{"timestamp":"2026-01-23T14:30:45.123Z","tool":"github_list_repos","service":"github","operation":"read","status":"allowed"}
+{"timestamp":"2026-01-23T14:31:12.456Z","tool":"github_delete_repo","service":"github","operation":"delete","status":"denied","reason":"Destructive operations require manual approval"}
+```
+
+### Updating Rules
+
+To change governance rules:
+
+1. Edit `~/.mcp-gov/rules.json`
+2. No need to restart or re-wrap - changes take effect immediately
+3. Next tool call will use the updated rules
+
+```bash
+# Edit rules
+vim ~/.mcp-gov/rules.json
+
+# No restart needed - just continue using your client
+```
+
+### Checking Server Status
+
+View which servers are wrapped:
+
+```bash
+# Show wrapped config
+cat ~/.config/claude/config.json | jq '.mcpServers'
+
+# Or for Claude Code format
+cat ~/.config/claude/config.json | jq '.projects.default.mcpServers'
+```
+
+Wrapped servers will have `"command": "mcp-gov-proxy"` instead of their original command.
+
+### Restoring from Backup
+
+If you need to restore your config:
+
+```bash
+# List available backups
+ls -lt ~/.config/claude/*.backup.* | head -5
+
+# Restore from a backup
+cp ~/.config/claude/config.json.backup.20260123-143022 ~/.config/claude/config.json
+```
+
+### Direct Proxy Usage (Advanced)
+
+For testing or custom integrations, use the proxy directly:
+
+```bash
+# Run a single server through the proxy
+mcp-gov-proxy \
+  --target "npx -y @modelcontextprotocol/server-github" \
+  --rules ~/.mcp-gov/rules.json
+
+# Pipe input/output for testing
+echo '{"jsonrpc":"2.0","id":1,"method":"tools/list"}' | \
+  mcp-gov-proxy \
+    --target "npx -y @modelcontextprotocol/server-github" \
+    --rules ~/.mcp-gov/rules.json
 ```
 
 ## Quick Start
@@ -93,6 +288,211 @@ Add to `~/.config/Claude/claude_desktop_config.json`:
 }
 ```
 
+## Troubleshooting
+
+### Missing rules.json
+
+**Error:** `Error: Rules file not found: /path/to/rules.json`
+
+**Solution:** Create the rules file:
+
+```bash
+mkdir -p ~/.mcp-gov
+cat > ~/.mcp-gov/rules.json << 'EOF'
+{
+  "rules": []
+}
+EOF
+```
+
+Even an empty rules array works (default is to allow all operations).
+
+### Config file errors
+
+**Error:** `Error: Config file not found` or `Error: Invalid config format`
+
+**Solution:** Check your config file path and format:
+
+```bash
+# Verify file exists
+ls -la ~/.config/claude/config.json
+
+# Check JSON is valid
+jq '.' ~/.config/claude/config.json
+
+# Check for mcpServers key
+jq 'keys' ~/.config/claude/config.json
+```
+
+For Claude Code, the config uses `projects.default.mcpServers` or `projects.<project-name>.mcpServers`.
+For other clients, look for top-level `mcpServers`.
+
+### Wrapper says "No servers found"
+
+**Error:** `Found 0 MCP servers`
+
+**Solution:** Check your config format:
+
+```bash
+# Claude Code format
+cat ~/.config/claude/config.json | jq '.projects'
+
+# Flat format
+cat ~/.config/claude/config.json | jq '.mcpServers'
+```
+
+Make sure you've added at least one server using your client's native command first.
+
+### Proxy not blocking operations
+
+**Problem:** Operations that should be denied are being allowed.
+
+**Solutions:**
+
+1. **Verify rules file syntax:**
+   ```bash
+   jq '.' ~/.mcp-gov/rules.json
+   ```
+
+2. **Check service name matches:**
+   Tool names like `github_delete_repo` are parsed as service `github`, operation `delete`.
+   Your rules should use `"service": "github"`.
+
+3. **Check operation detection:**
+   ```bash
+   node -e "import('./src/operation-detector.js').then(m => console.log(m.detectOperation('github_delete_repo')))"
+   ```
+
+4. **Review audit logs:**
+   Check stderr output to see what's being detected:
+   ```bash
+   # Logs show what service/operation was detected
+   tail ~/.mcp-gov/audit.log | jq '.'
+   ```
+
+### Path issues (Windows)
+
+**Problem:** Paths with backslashes or spaces cause errors.
+
+**Solution:** Use forward slashes (works on Windows too) or quote paths:
+
+```powershell
+# Forward slashes work on Windows
+mcp-gov-wrap --config ~/.config/claude/config.json --rules ~/.mcp-gov/rules.json --tool "claude chat"
+
+# Or use quotes for paths with spaces
+mcp-gov-wrap --config "C:\Program Files\Claude\config.json" --rules "C:\mcp-gov\rules.json" --tool "claude chat"
+```
+
+### Commands fail after wrapping
+
+**Problem:** MCP client fails to start or servers don't respond after wrapping.
+
+**Solutions:**
+
+1. **Test original command:**
+   ```bash
+   # Test the server command directly
+   npx -y @modelcontextprotocol/server-github
+   ```
+
+2. **Test proxy directly:**
+   ```bash
+   # If original works, test through proxy
+   mcp-gov-proxy --target "npx -y @modelcontextprotocol/server-github" --rules ~/.mcp-gov/rules.json
+   ```
+
+3. **Restore from backup:**
+   ```bash
+   # If wrapping broke config, restore backup
+   ls -lt ~/.config/claude/*.backup.* | head -1
+   cp <backup-file> ~/.config/claude/config.json
+   ```
+
+4. **Check for double-wrapping:**
+   ```bash
+   # Verify servers aren't double-wrapped
+   cat ~/.config/claude/config.json | jq '.mcpServers'
+
+   # Should see "mcp-gov-proxy" as command, NOT nested proxies
+   ```
+
+### Binary not found after installation
+
+**Error:** `command not found: mcp-gov-proxy`
+
+**Solution:** Add npm global bin to PATH:
+
+**Linux/macOS:**
+```bash
+# Find global bin directory
+npm prefix -g
+
+# Add to PATH (add to ~/.bashrc or ~/.zshrc)
+export PATH="$(npm prefix -g)/bin:$PATH"
+```
+
+**Windows:**
+```powershell
+# Find global bin directory
+npm prefix -g
+
+# Add to PATH in System Environment Variables
+# Or use full path:
+$env:PATH += ";$(npm prefix -g)\bin"
+```
+
+### Permission denied on Linux/macOS
+
+**Error:** `Permission denied` when running binaries.
+
+**Solution:** Make binaries executable:
+
+```bash
+chmod +x $(npm prefix -g)/lib/node_modules/mcp-gov/bin/mcp-gov-proxy.js
+chmod +x $(npm prefix -g)/lib/node_modules/mcp-gov/bin/mcp-gov-wrap.js
+```
+
+### Audit logs not appearing
+
+**Problem:** No logs in stderr or log file.
+
+**Solutions:**
+
+1. **Ensure stderr is redirected:**
+   ```bash
+   mcp-gov-wrap ... 2>> ~/.mcp-gov/audit.log
+   ```
+
+2. **Check tools are being called:**
+   Use your MCP client to call a tool and verify it triggers the proxy.
+
+3. **Test proxy directly:**
+   ```bash
+   echo '{"jsonrpc":"2.0","id":1,"method":"tools/list"}' | \
+     mcp-gov-proxy --target "npx -y @modelcontextprotocol/server-github" --rules ~/.mcp-gov/rules.json \
+     2>&1 | tee test.log
+   ```
+
+### Performance issues
+
+**Problem:** Tool calls seem slow after adding governance.
+
+**Expected:** Proxy overhead should be < 50ms per call.
+
+**Solutions:**
+
+1. **Check rules file size:**
+   Very large rules files (1000+ rules) may slow parsing.
+
+2. **Test without proxy:**
+   Compare performance with and without governance to isolate the issue.
+
+3. **Check network latency:**
+   If calling external APIs, most delay is network, not governance.
+
+For more help, see [TESTING.md](TESTING.md) or open an issue on GitHub.
+
 ## Operation Detection
 
 The system automatically classifies tools based on keywords in their names:
@@ -109,41 +509,417 @@ Priority order: admin → delete → execute → write → read
 
 ## Permission Rules
 
-Rules are defined per service and operation:
+### Rules File Format (CLI Tools)
+
+For the auto-wrap CLI tools, rules are defined in `rules.json`:
 
 ```json
 {
-  "serviceName": {
-    "read": "allow",
-    "write": "allow",
-    "delete": "deny",
-    "execute": "allow",
-    "admin": "deny"
-  }
+  "rules": [
+    {
+      "service": "github",
+      "operations": ["delete", "admin"],
+      "permission": "deny",
+      "reason": "Destructive operations require manual approval"
+    },
+    {
+      "service": "github",
+      "operations": ["read", "write"],
+      "permission": "allow"
+    }
+  ]
 }
 ```
 
-- Default policy: `allow` (if no rule exists)
-- Missing operations inherit default
-- Service name extracted from tool name prefix (e.g., `github_list` → `github`)
+**Fields:**
+- `service`: Service name (extracted from tool name prefix, e.g., `github_list_repos` → `github`)
+- `operations`: Array of operation types: `["read", "write", "delete", "execute", "admin"]`
+- `permission`: Either `"allow"` or `"deny"`
+- `reason` (optional): Human-readable explanation for deny rules
+
+### Multiple Service Examples
+
+```json
+{
+  "rules": [
+    {
+      "service": "github",
+      "operations": ["delete", "admin"],
+      "permission": "deny",
+      "reason": "Destructive operations require manual approval"
+    },
+    {
+      "service": "google",
+      "operations": ["delete"],
+      "permission": "deny",
+      "reason": "Prevent accidental deletion of Google Drive files"
+    },
+    {
+      "service": "aws",
+      "operations": ["admin", "execute"],
+      "permission": "deny",
+      "reason": "AWS administrative actions require explicit approval"
+    },
+    {
+      "service": "database",
+      "operations": ["delete", "admin"],
+      "permission": "deny",
+      "reason": "Database modifications must be reviewed"
+    },
+    {
+      "service": "slack",
+      "operations": ["delete"],
+      "permission": "deny",
+      "reason": "Cannot delete messages once sent"
+    }
+  ]
+}
+```
+
+### Default Behavior
+
+- **Default policy:** `allow` (if no rule matches, operation is allowed)
+- Operations not listed in rules default to allowed
+- Service names are automatically extracted from tool names
+- Rules are evaluated at runtime (no restart needed after changes)
+
+### Programmatic API Format
+
+For the `GovernedMCPServer` class, rules use a different format:
+
+```javascript
+const rules = {
+  serviceName: {
+    read: 'allow',
+    write: 'allow',
+    delete: 'deny',
+    execute: 'allow',
+    admin: 'deny'
+  }
+};
+```
 
 ## Audit Logs
 
-All operations are logged to stderr as JSON:
+### Log Format
+
+All tool operations are logged to stderr in JSON format by the proxy:
 
 ```json
 {
-  "timestamp": "2026-01-21T10:00:00.000Z",
+  "timestamp": "2026-01-23T14:30:45.123Z",
   "tool": "github_delete_repo",
-  "args": "{\"repo_name\":\"test-repo\"}",
+  "service": "github",
+  "operation": "delete",
   "status": "denied",
-  "detail": "Permission denied by governance rules"
+  "reason": "Destructive operations require manual approval"
 }
 ```
 
-Status values: `allowed`, `denied`, `success`, `error`
+**Fields:**
+- `timestamp`: ISO 8601 timestamp (UTC)
+- `tool`: Full tool name as called by the MCP client
+- `service`: Extracted service name (e.g., `github` from `github_delete_repo`)
+- `operation`: Operation type (`read`, `write`, `delete`, `execute`, `admin`)
+- `status`: Either `allowed` or `denied`
+- `reason`: Optional explanation (only for denied operations)
+
+### Capturing Logs
+
+Redirect stderr to capture audit logs:
+
+```bash
+# Append to log file
+mcp-gov-wrap \
+  --config ~/.config/claude/config.json \
+  --rules ~/.mcp-gov/rules.json \
+  --tool "claude chat" \
+  2>> ~/.mcp-gov/audit.log
+```
+
+Or with your alias:
+
+```bash
+# Capture stderr to log
+claude-gov 2>> ~/.mcp-gov/audit.log
+```
+
+### Real-Time Monitoring
+
+Monitor logs in real-time using `tail` and `jq`:
+
+```bash
+# Watch logs with pretty formatting
+tail -f ~/.mcp-gov/audit.log | jq '.'
+
+# Watch only denied operations
+tail -f ~/.mcp-gov/audit.log | jq -r 'select(.status=="denied")'
+
+# Count operations by service
+tail -f ~/.mcp-gov/audit.log | jq -r '.service' | sort | uniq -c
+
+# Show timestamp and tool name
+tail -f ~/.mcp-gov/audit.log | jq -r '"\(.timestamp) \(.tool) \(.status)"'
+```
+
+### Log Analysis
+
+Analyze historical audit logs:
+
+```bash
+# Count total operations
+wc -l ~/.mcp-gov/audit.log
+
+# Count denied operations
+grep '"status":"denied"' ~/.mcp-gov/audit.log | wc -l
+
+# List unique tools called
+jq -r '.tool' ~/.mcp-gov/audit.log | sort | uniq
+
+# Operations by service
+jq -r '.service' ~/.mcp-gov/audit.log | sort | uniq -c | sort -rn
+
+# Denied operations with reasons
+jq -r 'select(.status=="denied") | "\(.tool): \(.reason)"' ~/.mcp-gov/audit.log
+
+# Operations in the last hour
+jq -r --arg hour "$(date -u +%Y-%m-%dT%H)" 'select(.timestamp | startswith($hour))' ~/.mcp-gov/audit.log
+
+# Group by hour
+jq -r '.timestamp[0:13]' ~/.mcp-gov/audit.log | uniq -c
+```
+
+### Monitoring Best Practices
+
+1. **Rotate logs** to prevent unlimited growth:
+   ```bash
+   # Add to cron (daily rotation)
+   0 0 * * * mv ~/.mcp-gov/audit.log ~/.mcp-gov/audit.$(date +\%Y\%m\%d).log && touch ~/.mcp-gov/audit.log
+   ```
+
+2. **Alert on anomalies** using a simple script:
+   ```bash
+   #!/bin/bash
+   # alert-on-denied.sh
+   tail -f ~/.mcp-gov/audit.log | while read line; do
+     status=$(echo $line | jq -r '.status')
+     if [ "$status" = "denied" ]; then
+       tool=$(echo $line | jq -r '.tool')
+       reason=$(echo $line | jq -r '.reason')
+       echo "ALERT: Denied operation: $tool ($reason)"
+       # Send notification, email, etc.
+     fi
+   done
+   ```
+
+3. **Export to external systems**:
+   ```bash
+   # Forward to syslog
+   tail -f ~/.mcp-gov/audit.log | logger -t mcp-gov
+
+   # Forward to monitoring service
+   tail -f ~/.mcp-gov/audit.log | curl -X POST -H "Content-Type: application/json" \
+     -d @- https://your-monitoring-service.com/logs
+   ```
+
+4. **Backup audit logs** regularly:
+   ```bash
+   # Daily backup
+   tar -czf ~/backups/mcp-audit-$(date +%Y%m%d).tar.gz ~/.mcp-gov/*.log
+   ```
+
+### Log Retention
+
+Consider your retention requirements:
+
+- **Development**: 7-30 days
+- **Production**: 90-365 days (or per compliance requirements)
+- **Compliance**: May require indefinite retention and immutability
+
+### Privacy Considerations
+
+Audit logs may contain sensitive information:
+
+- Tool names might reveal user intent
+- Service names show what systems are being accessed
+- Timestamps reveal usage patterns
+
+Ensure logs are:
+- Stored securely (appropriate file permissions)
+- Encrypted at rest if required
+- Access-controlled
+- Included in backup strategies
+
+### Example: Continuous Monitoring Dashboard
+
+```bash
+#!/bin/bash
+# mcp-dashboard.sh - Simple audit log dashboard
+
+watch -n 5 '
+echo "=== MCP Governance Dashboard ==="
+echo ""
+echo "Total Operations: $(wc -l < ~/.mcp-gov/audit.log)"
+echo "Allowed: $(grep -c "\"status\":\"allowed\"" ~/.mcp-gov/audit.log || echo 0)"
+echo "Denied: $(grep -c "\"status\":\"denied\"" ~/.mcp-gov/audit.log || echo 0)"
+echo ""
+echo "=== Top Services ==="
+jq -r ".service" ~/.mcp-gov/audit.log | sort | uniq -c | sort -rn | head -5
+echo ""
+echo "=== Recent Denied Operations ==="
+jq -r "select(.status==\"denied\") | \"\(.timestamp) \(.tool)\"" ~/.mcp-gov/audit.log | tail -5
+'
+```
 
 ## Architecture
+
+### Auto-Wrap System Architecture
+
+```
+┌──────────────────────────────────────────────────────────────┐
+│                        User Workflow                          │
+└──────────────────────────────────────────────────────────────┘
+                             │
+                             │ 1. Add servers with native command
+                             │    (claude mcp add server ...)
+                             ▼
+┌──────────────────────────────────────────────────────────────┐
+│                    ~/.config/claude/config.json               │
+│  {                                                            │
+│    "mcpServers": {                                            │
+│      "github": {                                              │
+│        "command": "npx",                                      │
+│        "args": ["-y", "@modelcontextprotocol/server-github"] │
+│      }                                                        │
+│    }                                                          │
+│  }                                                            │
+└──────────────────────────────────────────────────────────────┘
+                             │
+                             │ 2. Run wrapper
+                             │    (mcp-gov-wrap --config ... --rules ... --tool ...)
+                             ▼
+┌──────────────────────────────────────────────────────────────┐
+│                      mcp-gov-wrap                             │
+│  ┌────────────────────────────────────────────────────────┐  │
+│  │ 1. Read config file (detect format)                    │  │
+│  │ 2. Load rules from ~/.mcp-gov/rules.json              │  │
+│  │ 3. Detect unwrapped servers                           │  │
+│  │ 4. Create timestamped backup                          │  │
+│  │ 5. Wrap servers: replace command with mcp-gov-proxy   │  │
+│  │ 6. Execute tool command (e.g., "claude chat")         │  │
+│  └────────────────────────────────────────────────────────┘  │
+└──────────────────────────────────────────────────────────────┘
+                             │
+                             │ 3. Config now wrapped
+                             ▼
+┌──────────────────────────────────────────────────────────────┐
+│               ~/.config/claude/config.json (wrapped)          │
+│  {                                                            │
+│    "mcpServers": {                                            │
+│      "github": {                                              │
+│        "command": "mcp-gov-proxy",                            │
+│        "args": [                                              │
+│          "--target", "npx -y @modelcontextprotocol/...",     │
+│          "--rules", "/home/user/.mcp-gov/rules.json"         │
+│        ]                                                      │
+│      }                                                        │
+│    }                                                          │
+│  }                                                            │
+└──────────────────────────────────────────────────────────────┘
+                             │
+                             │ 4. Client launches with governed servers
+                             ▼
+┌──────────────────────────────────────────────────────────────┐
+│                      MCP Client                               │
+│                   (Claude Code, Droid, etc.)                  │
+└──────────────────────────────────────────────────────────────┘
+                             │
+                             │ 5. Client makes tool call
+                             │    (tools/call: github_delete_repo)
+                             ▼
+┌──────────────────────────────────────────────────────────────┐
+│                      mcp-gov-proxy                            │
+│  ┌────────────────────────────────────────────────────────┐  │
+│  │ JSON-RPC Message Interception                          │  │
+│  │  ↓                                                      │  │
+│  │ Operation Detection                                     │  │
+│  │  - Parse tool name: github_delete_repo                 │  │
+│  │  - Extract service: github                             │  │
+│  │  - Extract operation: delete                           │  │
+│  │  ↓                                                      │  │
+│  │ Permission Check                                        │  │
+│  │  - Load rules.json                                      │  │
+│  │  - Check service="github", operation="delete"          │  │
+│  │  - Decision: DENY                                       │  │
+│  │  ↓                                                      │  │
+│  │ Audit Logging (stderr)                                  │  │
+│  │  {"timestamp":"...","tool":"github_delete_repo",       │  │
+│  │   "service":"github","operation":"delete",             │  │
+│  │   "status":"denied","reason":"..."}                    │  │
+│  │  ↓                                                      │  │
+│  │ Response                                                │  │
+│  │  - If ALLOW: Forward to target server                  │  │
+│  │  - If DENY: Return error to client                     │  │
+│  └────────────────────────────────────────────────────────┘  │
+└──────────────────────────────────────────────────────────────┘
+                             │
+                             │ 6a. If ALLOWED: Forward to target
+                             ▼
+┌──────────────────────────────────────────────────────────────┐
+│                   Target MCP Server                           │
+│            (npx -y @modelcontextprotocol/server-github)       │
+│  ┌────────────────────────────────────────────────────────┐  │
+│  │ Execute tool logic                                      │  │
+│  │  - Call GitHub API                                      │  │
+│  │  - Return result                                        │  │
+│  └────────────────────────────────────────────────────────┘  │
+└──────────────────────────────────────────────────────────────┘
+                             │
+                             │ 7. Result flows back to client
+                             ▼
+┌──────────────────────────────────────────────────────────────┐
+│                      MCP Client                               │
+│                 Receives result or error                      │
+└──────────────────────────────────────────────────────────────┘
+```
+
+### Component Responsibilities
+
+**mcp-gov-wrap (Wrapper)**
+- Config file discovery and parsing
+- Server detection (wrapped vs unwrapped)
+- Automatic wrapping with mcp-gov-proxy
+- Config backup management
+- Tool command execution
+
+**mcp-gov-proxy (Proxy)**
+- JSON-RPC message interception
+- Operation detection and classification
+- Permission checking against rules
+- Audit logging to stderr
+- Message forwarding to target servers
+
+**rules.json**
+- Centralized governance policies
+- Service-specific operation rules
+- Allow/deny decisions with reasons
+- Hot-reloadable (no restart needed)
+
+**Target MCP Servers**
+- Unchanged original servers
+- No code modifications needed
+- Work through proxy transparently
+
+### Data Flow
+
+1. **Setup**: User adds servers with native commands → mcp-gov-wrap wraps them
+2. **Runtime**: Client calls tool → Proxy intercepts → Checks permission → Forwards or denies
+3. **Audit**: Every operation logged to stderr with timestamp, service, operation, status
+4. **Updates**: Change rules.json → Takes effect immediately on next call
+
+### Programmatic API Architecture (Alternative)
+
+For building custom governed servers:
 
 ```
 ┌─────────────────┐
@@ -154,7 +930,7 @@ Status values: `allowed`, `denied`, `success`, `error`
 ┌─────────────────┐
 │ GovernedMCP     │ 1. Check permission
 │ Server          │ 2. Log operation
-│                 │ 3. Execute handler
+│ (SDK)           │ 3. Execute handler
 └────────┬────────┘
          │
          ▼
@@ -165,12 +941,27 @@ Status values: `allowed`, `denied`, `success`, `error`
 
 ## Examples
 
-See `examples/github/` for a complete working example with:
+### Auto-Wrap System
 
-- GitHub API integration (list repos, delete repo)
-- Permission rules configuration
-- Environment variable management
-- Claude Desktop integration
+- **[Auto-Wrap Example](examples/auto-wrap-example.md)**: Complete step-by-step walkthrough
+  - Installation and setup
+  - Creating rules files
+  - Adding and wrapping servers
+  - Daily workflow and monitoring
+
+- **[Multi-Client Example](examples/multi-client-example.md)**: Using governance with multiple MCP clients
+  - Claude Code, Droid, and custom clients
+  - Shared rules across clients
+  - Centralized audit logging
+  - Environment-specific configurations
+
+### Programmatic API
+
+- **[GitHub Example](examples/github/)**: Complete working example with:
+  - GitHub API integration (list repos, delete repo)
+  - Permission rules configuration
+  - Environment variable management
+  - Claude Desktop integration
 
 ## Platform Compatibility
 

@@ -154,32 +154,32 @@
     - verify: README includes platform section
   - [x] 5.6 Verify: Manual test on macOS and Windows (if available) or document testing requirements
 
-- [ ] 6.0 Documentation and Examples
-  - [ ] 6.1 Create examples/auto-wrap-example.md with step-by-step walkthrough
+- [x] 6.0 Documentation and Examples
+  - [x] 6.1 Create examples/auto-wrap-example.md with step-by-step walkthrough
     - tdd: no
     - verify: File exists with complete example
-  - [ ] 6.2 Document initial setup (installation, rules file creation, alias setup)
+  - [x] 6.2 Document initial setup (installation, rules file creation, alias setup)
     - tdd: no
     - verify: README has Setup section with copy-paste commands
-  - [ ] 6.3 Document daily usage workflow (add server, run tool, view logs)
+  - [x] 6.3 Document daily usage workflow (add server, run tool, view logs)
     - tdd: no
     - verify: README has Usage section with examples
-  - [ ] 6.4 Add troubleshooting section for common issues (missing rules.json, config errors, path issues)
+  - [x] 6.4 Add troubleshooting section for common issues (missing rules.json, config errors, path issues)
     - tdd: no
     - verify: README has Troubleshooting section
-  - [ ] 6.5 Document rules file format with multiple service examples
+  - [x] 6.5 Document rules file format with multiple service examples
     - tdd: no
     - verify: README explains rules.json structure
-  - [ ] 6.6 Add example for multiple MCP client tools (Claude Code, Droid)
+  - [x] 6.6 Add example for multiple MCP client tools (Claude Code, Droid)
     - tdd: no
     - verify: Examples directory contains multi-tool samples
-  - [ ] 6.7 Document audit log format and monitoring approach
+  - [x] 6.7 Document audit log format and monitoring approach
     - tdd: no
     - verify: README explains audit logging
-  - [ ] 6.8 Create architecture diagram showing component interaction
+  - [x] 6.8 Create architecture diagram showing component interaction
     - tdd: no
     - verify: Diagram exists in docs or README
-  - [ ] 6.9 Verify: Documentation is complete and accurate by following walkthrough
+  - [x] 6.9 Verify: Documentation is complete and accurate by following walkthrough
 
 - [ ] 7.0 Final Testing and Validation
   - [ ] 7.1 Run complete test suite: `npm run test:all`
