@@ -6,10 +6,12 @@
  */
 
 import { parseArgs } from 'node:util';
-import { readFileSync, writeFileSync, existsSync, copyFileSync } from 'node:fs';
-import { exec } from 'node:child_process';
+import { readFileSync, writeFileSync, existsSync, copyFileSync, mkdirSync } from 'node:fs';
+import { exec, spawn } from 'node:child_process';
 import { promisify } from 'node:util';
 import { resolve, dirname, join } from 'node:path';
+import { homedir } from 'node:os';
+import { extractService, detectOperation } from '../src/operation-detector.js';
 
 const execAsync = promisify(exec);
 
@@ -53,25 +55,30 @@ function parseCliArgs() {
  */
 function showUsage() {
   console.log(`
-Usage: mcp-gov-wrap --config <config.json> --rules <rules.json> --tool <command>
+Usage: mcp-gov-wrap --config <config.json> [--rules <rules.json>] --tool <command>
 
 Options:
   --config, -c    Path to MCP config file (e.g., ~/.config/claude/config.json)
-  --rules, -r     Path to governance rules file (e.g., ~/.mcp-gov/rules.json)
+  --rules, -r     Path to governance rules file (optional, defaults to ~/.mcp-gov/rules.json)
   --tool, -t      Tool command to execute after wrapping (e.g., "claude chat")
   --help, -h      Show this help message
 
 Description:
   Auto-discovers unwrapped MCP servers in config and wraps them with governance proxy.
+  If rules file doesn't exist, generates one with safe defaults (allow read/write, deny delete/admin/execute).
+  On subsequent runs, detects new servers and adds rules for them (delta approach).
   Creates a timestamped backup of the config file before modification.
   Supports both Claude Code format (projects.mcpServers) and flat format (mcpServers).
 
 Examples:
-  # Wrap servers and launch Claude Code
+  # Wrap servers with auto-generated rules and launch Claude Code
+  mcp-gov-wrap --config ~/.config/claude/config.json --tool "claude chat"
+
+  # Wrap servers with custom rules
   mcp-gov-wrap --config ~/.config/claude/config.json --rules ~/.mcp-gov/rules.json --tool "claude chat"
 
-  # Check what would be wrapped (dry run - not yet implemented)
-  mcp-gov-wrap --config ~/.config/claude/config.json --rules ~/.mcp-gov/rules.json --tool "echo Done"
+  # Check what would be wrapped
+  mcp-gov-wrap --config ~/.config/claude/config.json --tool "echo Done"
 `);
   process.exit(0);
 }
@@ -87,9 +94,7 @@ function validateArgs(args) {
     errors.push('--config argument is required');
   }
 
-  if (!args.rules) {
-    errors.push('--rules argument is required');
-  }
+  // --rules is now optional, will default to ~/.mcp-gov/rules.json
 
   if (!args.tool) {
     errors.push('--tool argument is required');
@@ -313,6 +318,259 @@ function wrapServers(config, unwrappedNames, rulesPath) {
 }
 
 /**
+ * Discover tools from an MCP server by spawning it and querying tools/list
+ * @param {Object} serverConfig - Server configuration {command, args}
+ * @param {string} serverName - Name of the server
+ * @returns {Promise<string[]>} Array of tool names
+ */
+async function discoverServerTools(serverConfig, serverName) {
+  return new Promise((resolve, reject) => {
+    // Build command
+    const command = serverConfig.command || '';
+    const args = serverConfig.args || [];
+
+    // Spawn the server
+    const child = spawn(command, args, {
+      env: { ...process.env, ...serverConfig.env },
+      stdio: ['pipe', 'pipe', 'pipe']
+    });
+
+    let toolsList = [];
+    let responseBuffer = '';
+    let timeout;
+
+    // Set timeout for discovery (5 seconds)
+    timeout = setTimeout(() => {
+      child.kill();
+      console.error(`  Warning: Discovery timeout for ${serverName}, using service-level defaults`);
+      resolve([]);
+    }, 5000);
+
+    // Send tools/list request
+    const listRequest = JSON.stringify({
+      jsonrpc: '2.0',
+      method: 'tools/list',
+      id: 1
+    }) + '\n';
+
+    child.stdin.write(listRequest);
+
+    // Read response
+    child.stdout.on('data', (data) => {
+      responseBuffer += data.toString();
+
+      // Try to parse JSON-RPC response
+      const lines = responseBuffer.split('\n');
+      for (const line of lines) {
+        if (!line.trim()) continue;
+
+        try {
+          const response = JSON.parse(line);
+          if (response.id === 1 && response.result && response.result.tools) {
+            toolsList = response.result.tools.map(t => t.name);
+            clearTimeout(timeout);
+            child.kill();
+            resolve(toolsList);
+            return;
+          }
+        } catch (e) {
+          // Not valid JSON yet, continue buffering
+        }
+      }
+    });
+
+    child.on('error', (err) => {
+      clearTimeout(timeout);
+      console.error(`  Warning: Failed to discover tools from ${serverName}: ${err.message}`);
+      resolve([]);
+    });
+
+    child.on('close', (code) => {
+      clearTimeout(timeout);
+      if (toolsList.length === 0) {
+        console.error(`  Warning: No tools discovered from ${serverName}, using service-level defaults`);
+      }
+      resolve(toolsList);
+    });
+  });
+}
+
+/**
+ * Generate default rules for a service with safe defaults
+ * @param {string} serviceName - Service name
+ * @param {string[]} tools - Array of tool names
+ * @returns {Object[]} Array of rule objects
+ */
+function generateDefaultRules(serviceName, tools) {
+  const rules = [];
+  const safeDefaults = {
+    read: 'allow',
+    write: 'allow',
+    delete: 'deny',
+    execute: 'deny',
+    admin: 'deny'
+  };
+
+  if (tools.length === 0) {
+    // No tools discovered, create service-level rules
+    for (const [operation, permission] of Object.entries(safeDefaults)) {
+      if (permission === 'deny') {
+        rules.push({
+          service: serviceName,
+          operations: [operation],
+          permission: permission,
+          reason: `${operation.charAt(0).toUpperCase() + operation.slice(1)} operations denied by default for safety`
+        });
+      }
+    }
+  } else {
+    // Create rules based on discovered tools
+    const toolsByOperation = { read: [], write: [], delete: [], execute: [], admin: [] };
+
+    tools.forEach(toolName => {
+      const operation = detectOperation(toolName);
+      if (toolsByOperation[operation]) {
+        toolsByOperation[operation].push(toolName);
+      }
+    });
+
+    // Create rules for each operation type that has tools
+    for (const [operation, permission] of Object.entries(safeDefaults)) {
+      if (toolsByOperation[operation].length > 0) {
+        const rule = {
+          service: serviceName,
+          operations: [operation],
+          permission: permission
+        };
+
+        if (permission === 'deny') {
+          rule.reason = `${operation.charAt(0).toUpperCase() + operation.slice(1)} operations denied by default for safety`;
+        }
+
+        rules.push(rule);
+      }
+    }
+  }
+
+  return rules;
+}
+
+/**
+ * Ensure rules file exists, generate with safe defaults if needed
+ * @param {string} rulesPath - Path to rules.json
+ * @param {Object} mcpServers - MCP servers configuration
+ * @returns {Promise<Object>} Loaded or generated rules
+ */
+async function ensureRulesExist(rulesPath, mcpServers) {
+  // Ensure directory exists
+  const rulesDir = dirname(rulesPath);
+  if (!existsSync(rulesDir)) {
+    mkdirSync(rulesDir, { recursive: true });
+  }
+
+  // Check if rules file exists
+  if (existsSync(rulesPath)) {
+    // Load existing rules and check for new servers
+    const existingRules = loadAndValidateRules(rulesPath);
+    const existingServices = new Set(existingRules.rules.map(r => r.service));
+
+    // Find new servers not in rules
+    const allServers = Object.keys(mcpServers);
+    const newServers = allServers.filter(serverName => !existingServices.has(serverName));
+
+    if (newServers.length === 0) {
+      console.log(`Using rules from: ${rulesPath}`);
+      return existingRules;
+    }
+
+    // Discover and add rules for new servers
+    console.log(`\nDiscovered ${newServers.length} new server(s) not in rules:`);
+    newServers.forEach(name => console.log(`  - ${name}`));
+    console.log('\nGenerating safe defaults for new servers...');
+
+    const newRules = [];
+    for (const serverName of newServers) {
+      const serverConfig = mcpServers[serverName];
+      console.log(`  Discovering tools from ${serverName}...`);
+
+      const tools = await discoverServerTools(serverConfig, serverName);
+      const rules = generateDefaultRules(serverName, tools);
+      newRules.push(...rules);
+
+      console.log(`  ✓ Added ${rules.length} rule(s) for ${serverName}`);
+    }
+
+    // Merge with existing rules
+    const mergedRules = {
+      _comment: 'Auto-generated governance rules. Edit as needed.',
+      _location: rulesPath,
+      rules: [...existingRules.rules, ...newRules]
+    };
+
+    // Save merged rules
+    writeFileSync(rulesPath, JSON.stringify(mergedRules, null, 2) + '\n');
+    console.log(`\n✓ Updated rules file: ${rulesPath}`);
+    console.log('\nTo customize governance rules, edit: ' + rulesPath);
+
+    return mergedRules;
+  } else {
+    // First run - generate rules for all servers
+    console.log('\nNo rules file found - generating with safe defaults...');
+
+    const allRules = [];
+    const serverNames = Object.keys(mcpServers);
+
+    if (serverNames.length === 0) {
+      console.log('No MCP servers found in config');
+      const emptyRules = {
+        _comment: 'Auto-generated governance rules. Add servers and run again.',
+        _location: rulesPath,
+        rules: []
+      };
+      writeFileSync(rulesPath, JSON.stringify(emptyRules, null, 2) + '\n');
+      return emptyRules;
+    }
+
+    console.log(`Discovering tools from ${serverNames.length} server(s)...`);
+
+    for (const serverName of serverNames) {
+      const serverConfig = mcpServers[serverName];
+      console.log(`  Discovering ${serverName}...`);
+
+      const tools = await discoverServerTools(serverConfig, serverName);
+      const rules = generateDefaultRules(serverName, tools);
+      allRules.push(...rules);
+
+      if (tools.length > 0) {
+        console.log(`  ✓ Found ${tools.length} tool(s), generated ${rules.length} rule(s)`);
+      } else {
+        console.log(`  ✓ Generated ${rules.length} service-level rule(s)`);
+      }
+    }
+
+    // Create rules file
+    const rulesData = {
+      _comment: 'Auto-generated governance rules. Edit as needed.',
+      _location: rulesPath,
+      rules: allRules
+    };
+
+    writeFileSync(rulesPath, JSON.stringify(rulesData, null, 2) + '\n');
+    console.log(`\n✓ Generated rules file: ${rulesPath}`);
+
+    // Show summary
+    const deniedOps = allRules.filter(r => r.permission === 'deny');
+    const allowedOps = allRules.filter(r => r.permission === 'allow');
+    console.log(`\nSafe defaults applied:`);
+    console.log(`  ✓ Allow: ${allowedOps.map(r => r.operations).flat().join(', ')}`);
+    console.log(`  ✗ Deny: ${deniedOps.map(r => r.operations).flat().join(', ')}`);
+    console.log('\nTo customize governance rules, edit: ' + rulesPath);
+
+    return rulesData;
+  }
+}
+
+/**
  * Main entry point
  */
 async function main() {
@@ -335,13 +593,15 @@ async function main() {
     process.exit(1);
   }
 
-  // Validate rules file
+  // Determine rules path (use provided or default to ~/.mcp-gov/rules.json)
+  const rulesPath = args.rules || join(homedir(), '.mcp-gov', 'rules.json');
+
+  // Ensure rules file exists (generate if needed with delta approach)
   let rules;
   try {
-    rules = loadAndValidateRules(args.rules);
-    console.log(`Loaded ${rules.rules.length} rules from ${args.rules}`);
+    rules = await ensureRulesExist(rulesPath, config.mcpServers);
   } catch (error) {
-    console.error(`Error loading rules: ${error.message}`);
+    console.error(`Error with rules: ${error.message}`);
     process.exit(1);
   }
 
@@ -385,7 +645,7 @@ async function main() {
     }
 
     // Get absolute path for rules
-    const absoluteRulesPath = resolve(args.rules);
+    const absoluteRulesPath = resolve(rulesPath);
 
     // Wrap servers
     const wrappedConfig = wrapServers(config, unwrapped, absoluteRulesPath);

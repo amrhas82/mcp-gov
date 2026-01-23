@@ -64,11 +64,13 @@ describe('mcp-gov-wrap CLI argument parsing', () => {
     assert.match(result.stderr, /--config.*required/i);
   });
 
-  test('should require --rules argument', async () => {
-    const result = await runWrapper(['--config', 'config.json', '--tool', 'claude']);
+  test('should NOT require --rules argument (now optional)', async () => {
+    const result = await runWrapper(['--config', 'config.json', '--tool', 'echo test']);
 
-    assert.notStrictEqual(result.exitCode, 0);
-    assert.match(result.stderr, /--rules.*required/i);
+    // Should not fail due to missing --rules (it's optional now)
+    if (result.exitCode !== 0) {
+      assert.doesNotMatch(result.stderr, /--rules.*required/i);
+    }
   });
 
   test('should require --tool argument', async () => {
@@ -163,7 +165,7 @@ describe('mcp-gov-wrap rules validation', () => {
     }
   });
 
-  test('should reject missing rules file', async () => {
+  test('should auto-generate missing rules file', async () => {
     const configPath = join(tmpDir, 'config.json');
     const rulesPath = join(tmpDir, 'nonexistent-rules.json');
 
@@ -175,8 +177,9 @@ describe('mcp-gov-wrap rules validation', () => {
       '--tool', 'echo test'
     ]);
 
-    assert.notStrictEqual(result.exitCode, 0);
-    assert.match(result.stderr, /rules.*not found/i);
+    // Should auto-generate rules file when it doesn't exist (not an error)
+    const output = result.stdout + result.stderr;
+    assert.match(output, /generat.*rules|no.*rules.*found/i);
   });
 
   test('should reject malformed rules JSON', async () => {

@@ -1,13 +1,36 @@
 # MCP Governance System
 
-A permission control and audit logging system for Model Context Protocol (MCP) servers. Provides fine-grained governance over tool operations with automatic detection and structured audit logs.
+A permission control and audit logging system for Model Context Protocol (MCP) servers. Provides fine-grained governance over tool operations with **automatic rule generation** and structured audit logs.
+
+## Quick Start (3 Steps)
+
+```bash
+# 1. Install globally
+npm install -g .
+
+# 2. Add MCP servers with your client's native command
+claude mcp add github --command "npx" --args "-y @modelcontextprotocol/server-github"
+
+# 3. Launch with governance (auto-generates rules!)
+mcp-gov-wrap --config ~/.config/claude/config.json --tool "claude chat"
+```
+
+That's it! Rules are automatically generated with safe defaults:
+- ✅ **Allow**: read, write operations
+- ❌ **Deny**: delete, admin, execute operations
+
+Edit `~/.mcp-gov/rules.json` to customize. Changes take effect immediately!
 
 ## Features
 
+- **Auto-Discovery**: Automatically discovers MCP server tools and generates governance rules with safe defaults
+- **Smart Delta Updates**: Detects new servers and adds rules while preserving your customizations
 - **Permission Control**: Fine-grained rules for read, write, delete, execute, and admin operations
 - **Operation Detection**: Automatic classification of 160+ keywords across 5 operation types
+- **Safe by Default**: Denies destructive operations (delete/admin/execute) unless explicitly allowed
 - **Audit Logging**: Structured JSON logs to stderr with timestamps, tool names, and status
-- **MCP-Compliant**: Works seamlessly with any MCP client (Claude Desktop, etc.)
+- **Zero Configuration**: Works out of the box - no manual rule writing required
+- **MCP-Compliant**: Works seamlessly with any MCP client (Claude Code, Droid, etc.)
 - **Middleware Pattern**: Wraps existing MCP servers without modifying tool logic
 
 ## Installation
@@ -26,7 +49,7 @@ npm install -g .
 
 ## Auto-Wrap Setup (Recommended)
 
-The easiest way to add governance to existing MCP servers is using the auto-wrap CLI tools.
+The easiest way to add governance to existing MCP servers is using the auto-wrap CLI tools with **automatic rule generation**.
 
 ### 1. Install CLI Tools
 
@@ -39,33 +62,7 @@ which mcp-gov-proxy
 which mcp-gov-wrap
 ```
 
-### 2. Create Rules File
-
-Create `~/.mcp-gov/rules.json` with your governance rules:
-
-```bash
-mkdir -p ~/.mcp-gov
-
-cat > ~/.mcp-gov/rules.json << 'EOF'
-{
-  "rules": [
-    {
-      "service": "github",
-      "operations": ["delete", "admin"],
-      "permission": "deny",
-      "reason": "Destructive operations require manual approval"
-    },
-    {
-      "service": "github",
-      "operations": ["read", "write"],
-      "permission": "allow"
-    }
-  ]
-}
-EOF
-```
-
-### 3. Add MCP Servers (Native Command)
+### 2. Add MCP Servers (Native Command)
 
 Use your MCP client's native command to add servers:
 
@@ -77,42 +74,110 @@ claude mcp add github --command "npx" --args "-y @modelcontextprotocol/server-gi
 droid mcp add github --command "npx" --args "-y @modelcontextprotocol/server-github"
 ```
 
-### 4. Wrap Servers and Launch
+### 3. Wrap Servers and Launch (Auto-generates Rules!)
 
-Use `mcp-gov-wrap` to automatically add governance to all servers:
+Use `mcp-gov-wrap` - **no rules file needed**, it auto-generates with safe defaults:
 
 ```bash
-# Wrap servers in Claude Code config and launch
+# Wrap servers and launch (rules auto-generated if missing)
 mcp-gov-wrap \
   --config ~/.config/claude/config.json \
-  --rules ~/.mcp-gov/rules.json \
   --tool "claude chat"
+```
 
-# Or create an alias for convenience
-alias claude-gov='mcp-gov-wrap --config ~/.config/claude/config.json --rules ~/.mcp-gov/rules.json --tool "claude chat"'
+**What happens on first run:**
+```
+No rules file found - generating with safe defaults...
+Discovering tools from 1 server(s)...
+  Discovering github...
+  ✓ Found 15 tool(s), generated 5 rule(s)
+
+✓ Generated rules file: ~/.mcp-gov/rules.json
+
+Safe defaults applied:
+  ✓ Allow: read, write
+  ✗ Deny: delete, admin, execute
+
+To customize governance rules, edit: ~/.mcp-gov/rules.json
+```
+
+The wrapper automatically:
+- **Discovers tools** from each MCP server
+- **Generates rules** with safe defaults (allow read/write, deny delete/admin/execute)
+- Saves rules to `~/.mcp-gov/rules.json`
+- Wraps servers with governance
+- Creates timestamped backups
+
+### 4. Customize Rules (Optional)
+
+Edit the auto-generated rules to customize permissions:
+
+```bash
+vim ~/.mcp-gov/rules.json
+```
+
+Example:
+```json
+{
+  "_comment": "Auto-generated governance rules. Edit as needed.",
+  "rules": [
+    {
+      "service": "github",
+      "operations": ["read"],
+      "permission": "allow"
+    },
+    {
+      "service": "github",
+      "operations": ["delete", "admin"],
+      "permission": "deny",
+      "reason": "Destructive operations require manual approval"
+    }
+  ]
+}
+```
+
+Changes take effect immediately - no restart needed!
+
+### 5. Create an Alias (Recommended)
+
+```bash
+# Add to ~/.bashrc or ~/.zshrc
+alias claude-gov='mcp-gov-wrap --config ~/.config/claude/config.json --tool "claude chat"'
 
 # Then just run:
 claude-gov
 ```
 
-### 5. Daily Usage
+### 6. Adding New Servers (Delta Approach)
 
-Once set up, your workflow is simple:
+When you add a new MCP server, the wrapper **automatically detects it** and adds rules:
 
 ```bash
-# Add a new server using native command
-claude mcp add new-server --command "node" --args "server.js"
+# Add a new server
+claude mcp add slack --command "npx" --args "-y @modelcontextprotocol/server-slack"
 
-# Launch with governance (automatically wraps new servers)
+# Run wrapper - it detects the new server
 claude-gov
 ```
 
-The wrapper:
-- Detects unwrapped servers automatically
-- Creates a timestamped backup before changes
-- Wraps servers with the governance proxy
-- Launches your client tool
-- Never double-wraps (idempotent)
+**What happens:**
+```
+Discovered 1 new server(s) not in rules:
+  - slack
+
+Generating safe defaults for new servers...
+  ✓ Added 3 rule(s) for slack
+
+✓ Updated rules file: ~/.mcp-gov/rules.json
+
+Your existing github rules are preserved!
+```
+
+The wrapper uses a **smart delta approach**:
+- Detects servers not in `rules.json`
+- Adds rules **only for new servers**
+- **Preserves your customizations** to existing rules
+- Never overwrites your manual edits
 
 See [examples/auto-wrap-example.md](examples/auto-wrap-example.md) for a complete walkthrough.
 
@@ -126,14 +191,18 @@ When you want to add a new MCP server, use your client's native command:
 # Add server with native command
 claude mcp add my-server --command "node" --args "/path/to/server.js"
 
-# Launch with wrapper to automatically add governance
+# Launch with wrapper - automatically discovers and adds governance
 mcp-gov-wrap \
   --config ~/.config/claude/config.json \
-  --rules ~/.mcp-gov/rules.json \
   --tool "claude chat"
 ```
 
-The wrapper detects the new server and wraps it automatically.
+The wrapper:
+1. Detects the new server
+2. Discovers its tools automatically
+3. Generates rules with safe defaults
+4. Adds rules only for the new server (preserves existing rules)
+5. Wraps the server with governance
 
 ### Viewing Audit Logs
 
@@ -143,7 +212,6 @@ Audit logs are written to stderr in JSON format. Capture them for monitoring:
 # Redirect stderr to a log file
 mcp-gov-wrap \
   --config ~/.config/claude/config.json \
-  --rules ~/.mcp-gov/rules.json \
   --tool "claude chat" \
   2>> ~/.mcp-gov/audit.log
 
@@ -290,22 +358,19 @@ Add to `~/.config/Claude/claude_desktop_config.json`:
 
 ## Troubleshooting
 
-### Missing rules.json
+### Rules Auto-Generation
 
-**Error:** `Error: Rules file not found: /path/to/rules.json`
+**Behavior:** When `--rules` is not provided or the file doesn't exist, rules are **automatically generated**.
 
-**Solution:** Create the rules file:
+The wrapper will:
+1. Discover tools from each MCP server
+2. Classify operations (read/write/delete/admin/execute)
+3. Generate rules with safe defaults
+4. Save to `~/.mcp-gov/rules.json` (or specified path)
 
-```bash
-mkdir -p ~/.mcp-gov
-cat > ~/.mcp-gov/rules.json << 'EOF'
-{
-  "rules": []
-}
-EOF
-```
+**To disable auto-generation:** Always provide a rules file explicitly with `--rules`.
 
-Even an empty rules array works (default is to allow all operations).
+**To regenerate rules:** Delete `~/.mcp-gov/rules.json` and run the wrapper again.
 
 ### Config file errors
 
@@ -632,12 +697,11 @@ Redirect stderr to capture audit logs:
 # Append to log file
 mcp-gov-wrap \
   --config ~/.config/claude/config.json \
-  --rules ~/.mcp-gov/rules.json \
   --tool "claude chat" \
   2>> ~/.mcp-gov/audit.log
 ```
 
-Or with your alias:
+Or with your alias (recommended):
 
 ```bash
 # Capture stderr to log
