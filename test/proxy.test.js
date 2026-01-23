@@ -651,7 +651,7 @@ console.error('Mock permission server ready');
     });
 
     // Wait for server to be ready
-    await new Promise(resolve => setTimeout(resolve, 300));
+    await new Promise(resolve => setTimeout(resolve, 500));
 
     // Send an unspecified service operation (should default to allow)
     const request = {
@@ -666,7 +666,7 @@ console.error('Mock permission server ready');
     child.stdin.write(JSON.stringify(request) + '\n');
 
     // Wait for response
-    await new Promise(resolve => setTimeout(resolve, 300));
+    await new Promise(resolve => setTimeout(resolve, 500));
 
     child.kill('SIGTERM');
 
