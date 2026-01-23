@@ -121,20 +121,20 @@
     - verify: Test passes - complete workflow verified
   - [x] 3.7 Verify: `node --test test/integration.test.js` - all integration tests pass
 
-- [ ] 4.0 Package Configuration and Installation
-  - [ ] 4.1 Update package.json to add bin entries for mcp-gov-proxy and mcp-gov-wrap
+- [x] 4.0 Package Configuration and Installation
+  - [x] 4.1 Update package.json to add bin entries for mcp-gov-proxy and mcp-gov-wrap
     - tdd: no
     - verify: `npm ls` shows no errors
-  - [ ] 4.2 Add npm scripts for testing (test:proxy, test:wrapper, test:integration, test:all)
+  - [x] 4.2 Add npm scripts for testing (test:proxy, test:wrapper, test:integration, test:all)
     - tdd: no
     - verify: `npm run test:all` executes all tests
-  - [ ] 4.3 Test global installation: npm install -g . and verify binary linking
+  - [x] 4.3 Test global installation: npm install -g . and verify binary linking
     - tdd: no
     - verify: `which mcp-gov-proxy && which mcp-gov-wrap` show installed binaries
-  - [ ] 4.4 Test uninstall and reinstall to ensure clean state
+  - [x] 4.4 Test uninstall and reinstall to ensure clean state
     - tdd: no
     - verify: `npm uninstall -g mcp-gov && npm install -g .` succeeds
-  - [ ] 4.5 Verify: `npm run test:all` - all tests pass after installation
+  - [x] 4.5 Verify: `npm run test:all` - all tests pass after installation
 
 - [ ] 5.0 Cross-Platform Compatibility
   - [ ] 5.1 Test proxy on Linux with path separators and line endings
