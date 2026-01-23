@@ -211,11 +211,18 @@ function logAudit(toolName, service, operation, allowed) {
  * @param {string} serviceName - Service name for rule matching
  * @param {string} targetCommand - Command to spawn target MCP server
  * @param {string} rulesPath - Path to rules.json file
- * @param {string} logPath - Path to audit log file
+ * @param {string} logPath - Path to audit log file (optional override)
  */
 function startProxy(serviceName, targetCommand, rulesPath, logPath) {
-  // Set up audit logging
-  auditLogPath = logPath || DEFAULT_AUDIT_LOG;
+  // Set up audit logging - organize by service
+  // Default: ~/.mcp-gov/logs/<service>.log
+  if (logPath) {
+    auditLogPath = logPath;
+  } else {
+    const logDir = join(homedir(), '.mcp-gov', 'logs');
+    const serviceLogName = serviceName || 'unknown';
+    auditLogPath = join(logDir, `${serviceLogName}.log`);
+  }
 
   // Ensure log directory exists
   const logDir = dirname(auditLogPath);
