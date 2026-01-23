@@ -1,0 +1,38 @@
+{
+  "name": "mcp-gov",
+  "version": "1.0.0",
+  "description": "MCP Governance System - Permission control and audit logging for Model Context Protocol servers",
+  "type": "module",
+  "main": "src/index.js",
+  "bin": {
+    "mcp-gov-proxy": "bin/mcp-gov-proxy.js",
+    "mcp-gov-wrap": "bin/mcp-gov-wrap.js"
+  },
+  "scripts": {
+    "example:github": "node examples/github/server.js",
+    "test": "node test/proxy.test.js && node test/wrapper.test.js && node test/platform.test.js && node test/integration.test.js && node test/multi-service.test.js && node test/performance.test.js",
+    "test:all": "npm test",
+    "test:proxy": "node test/proxy.test.js",
+    "test:wrapper": "node test/wrapper.test.js",
+    "test:platform": "node test/platform.test.js",
+    "test:integration": "node test/integration.test.js",
+    "test:multi-service": "node test/multi-service.test.js",
+    "test:performance": "node test/performance.test.js"
+  },
+  "keywords": [
+    "mcp",
+    "governance",
+    "permissions",
+    "audit"
+  ],
+  "author": "",
+  "license": "MIT",
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^0.5.0",
+    "axios": "^1.6.0",
+    "dotenv": "^16.0.0"
+  },
+  "devDependencies": {
+    "@types/node": "^25.0.10"
+  }
+}

@@ -1,0 +1,693 @@
+#!/usr/bin/env node
+
+/**
+ * mcp-gov-wrap - Generic MCP Server Wrapper
+ * Auto-discovers MCP servers and wraps them with governance proxy
+ */
+
+import { parseArgs } from 'node:util';
+import { readFileSync, writeFileSync, existsSync, copyFileSync, mkdirSync } from 'node:fs';
+import { exec, spawn } from 'node:child_process';
+import { promisify } from 'node:util';
+import { resolve, dirname, join } from 'node:path';
+import { homedir } from 'node:os';
+import { extractService, detectOperation } from '../src/operation-detector.js';
+
+const execAsync = promisify(exec);
+
+/**
+ * Parse command line arguments
+ * @returns {{ config: string, rules: string, tool: string, help: boolean }}
+ */
+function parseCliArgs() {
+  try {
+    const { values } = parseArgs({
+      options: {
+        config: {
+          type: 'string',
+          short: 'c',
+        },
+        rules: {
+          type: 'string',
+          short: 'r',
+        },
+        tool: {
+          type: 'string',
+          short: 't',
+        },
+        help: {
+          type: 'boolean',
+          short: 'h',
+        },
+      },
+      allowPositionals: false,
+    });
+
+    return values;
+  } catch (error) {
+    console.error(`Error parsing arguments: ${error.message}`);
+    process.exit(1);
+  }
+}
+
+/**
+ * Show usage information
+ */
+function showUsage() {
+  console.log(`
+Usage: mcp-gov-wrap --config <config.json> [--rules <rules.json>] --tool <command>
+
+Options:
+  --config, -c    Path to MCP config file (e.g., ~/.config/claude/config.json)
+  --rules, -r     Path to governance rules file (optional, defaults to ~/.mcp-gov/rules.json)
+  --tool, -t      Tool command to execute after wrapping (e.g., "claude chat")
+  --help, -h      Show this help message
+
+Description:
+  Auto-discovers unwrapped MCP servers in config and wraps them with governance proxy.
+  If rules file doesn't exist, generates one with safe defaults (allow read/write, deny delete/admin/execute).
+  On subsequent runs, detects new servers and adds rules for them (delta approach).
+  Creates a timestamped backup of the config file before modification.
+  Supports both Claude Code format (projects.mcpServers) and flat format (mcpServers).
+
+Examples:
+  # Wrap servers with auto-generated rules and launch Claude Code
+  mcp-gov-wrap --config ~/.config/claude/config.json --tool "claude chat"
+
+  # Wrap servers with custom rules
+  mcp-gov-wrap --config ~/.config/claude/config.json --rules ~/.mcp-gov/rules.json --tool "claude chat"
+
+  # Check what would be wrapped
+  mcp-gov-wrap --config ~/.config/claude/config.json --tool "echo Done"
+`);
+  process.exit(0);
+}
+
+/**
+ * Validate required arguments
+ * @param {{ config?: string, rules?: string, tool?: string }} args
+ */
+function validateArgs(args) {
+  const errors = [];
+
+  if (!args.config) {
+    errors.push('--config argument is required');
+  }
+
+  // --rules is now optional, will default to ~/.mcp-gov/rules.json
+
+  if (!args.tool) {
+    errors.push('--tool argument is required');
+  }
+
+  if (errors.length > 0) {
+    console.error('Error: Missing required arguments\n');
+    errors.forEach(err => console.error(`  ${err}`));
+    console.error('\nUse --help for usage information');
+    process.exit(1);
+  }
+}
+
+/**
+ * Load and parse config file with format detection
+ * @param {string} configPath - Path to config.json
+ * @returns {{ mcpServers: Object, format: string }} Config data and detected format
+ */
+function loadConfig(configPath) {
+  // Check if file exists
+  if (!existsSync(configPath)) {
+    throw new Error(`Config file not found: ${configPath}`);
+  }
+
+  // Read and parse JSON
+  let configData;
+  try {
+    const content = readFileSync(configPath, 'utf8');
+    configData = JSON.parse(content);
+  } catch (error) {
+    if (error instanceof SyntaxError) {
+      throw new Error(`Invalid JSON in config file: ${error.message}`);
+    }
+    throw new Error(`Failed to read config file: ${error.message}`);
+  }
+
+  // Detect format and extract mcpServers
+  let mcpServers;
+  let format;
+
+  if (configData.projects && configData.projects.mcpServers) {
+    // Claude Code format: { projects: { mcpServers: {...} } }
+    mcpServers = configData.projects.mcpServers;
+    format = 'claude-code';
+  } else if (configData.mcpServers) {
+    // Flat format: { mcpServers: {...} }
+    mcpServers = configData.mcpServers;
+    format = 'flat';
+  } else {
+    throw new Error('mcpServers not found in config. Config must contain "mcpServers" (flat format) or "projects.mcpServers" (Claude Code format)');
+  }
+
+  return { mcpServers, format, rawConfig: configData };
+}
+
+/**
+ * Load and validate rules file
+ * @param {string} rulesPath - Path to rules.json
+ * @returns {Object} Parsed rules object
+ */
+function loadAndValidateRules(rulesPath) {
+  // Check if file exists
+  if (!existsSync(rulesPath)) {
+    throw new Error(`Rules file not found: ${rulesPath}`);
+  }
+
+  // Read and parse JSON
+  let rulesData;
+  try {
+    const content = readFileSync(rulesPath, 'utf8');
+    rulesData = JSON.parse(content);
+  } catch (error) {
+    if (error instanceof SyntaxError) {
+      throw new Error(`Invalid JSON in rules file: ${error.message}`);
+    }
+    throw new Error(`Failed to read rules file: ${error.message}`);
+  }
+
+  // Validate rules structure
+  if (!rulesData.rules || !Array.isArray(rulesData.rules)) {
+    throw new Error('Rules file must contain a "rules" array');
+  }
+
+  // Validate each rule
+  rulesData.rules.forEach((rule, index) => {
+    if (!rule.service) {
+      throw new Error(`Rule at index ${index}: "service" field is required`);
+    }
+
+    if (!rule.operations || !Array.isArray(rule.operations)) {
+      throw new Error(`Rule at index ${index}: "operations" field is required and must be an array`);
+    }
+
+    if (!rule.permission) {
+      throw new Error(`Rule at index ${index}: "permission" field is required`);
+    }
+
+    if (rule.permission !== 'allow' && rule.permission !== 'deny') {
+      throw new Error(`Rule at index ${index}: "permission" must be "allow" or "deny", got "${rule.permission}"`);
+    }
+  });
+
+  return rulesData;
+}
+
+/**
+ * Check if a server is already wrapped with mcp-gov-proxy
+ * @param {Object} serverConfig - Server configuration object
+ * @returns {boolean} True if already wrapped
+ */
+function isServerWrapped(serverConfig) {
+  if (!serverConfig.command) {
+    return false;
+  }
+  return serverConfig.command.includes('mcp-gov-proxy');
+}
+
+/**
+ * Detect unwrapped servers in config
+ * @param {Object} mcpServers - MCP servers configuration
+ * @returns {{ wrapped: string[], unwrapped: string[] }} Lists of wrapped and unwrapped server names
+ */
+function detectUnwrappedServers(mcpServers) {
+  const wrapped = [];
+  const unwrapped = [];
+
+  for (const [serverName, serverConfig] of Object.entries(mcpServers)) {
+    if (isServerWrapped(serverConfig)) {
+      wrapped.push(serverName);
+    } else {
+      unwrapped.push(serverName);
+    }
+  }
+
+  return { wrapped, unwrapped };
+}
+
+/**
+ * Wrap a server configuration with mcp-gov-proxy
+ * @param {Object} serverConfig - Original server configuration
+ * @param {string} rulesPath - Absolute path to rules.json
+ * @returns {Object} Wrapped server configuration
+ */
+function wrapServer(serverConfig, rulesPath) {
+  // Build target command from original config
+  let targetCommand = serverConfig.command || '';
+
+  // Append original args if they exist
+  if (serverConfig.args && Array.isArray(serverConfig.args)) {
+    targetCommand += ' ' + serverConfig.args.join(' ');
+  }
+
+  targetCommand = targetCommand.trim();
+
+  // Create wrapped configuration
+  const wrappedConfig = {
+    command: 'mcp-gov-proxy',
+    args: [
+      '--target', targetCommand,
+      '--rules', rulesPath
+    ]
+  };
+
+  // Preserve environment variables if they exist
+  if (serverConfig.env) {
+    wrappedConfig.env = { ...serverConfig.env };
+  }
+
+  return wrappedConfig;
+}
+
+/**
+ * Create a timestamped backup of the config file
+ * @param {string} configPath - Path to config file
+ * @returns {string} Path to backup file
+ */
+function createBackup(configPath) {
+  const now = new Date();
+
+  // Format: YYYYMMDD-HHMMSS
+  const year = now.getFullYear();
+  const month = String(now.getMonth() + 1).padStart(2, '0');
+  const day = String(now.getDate()).padStart(2, '0');
+  const hour = String(now.getHours()).padStart(2, '0');
+  const minute = String(now.getMinutes()).padStart(2, '0');
+  const second = String(now.getSeconds()).padStart(2, '0');
+
+  const timestamp = `${year}${month}${day}-${hour}${minute}${second}`;
+  const backupPath = `${configPath}.backup-${timestamp}`;
+
+  copyFileSync(configPath, backupPath);
+
+  return backupPath;
+}
+
+/**
+ * Wrap unwrapped servers in the config
+ * @param {Object} config - Full config object with mcpServers
+ * @param {string[]} unwrappedNames - Names of servers to wrap
+ * @param {string} rulesPath - Absolute path to rules.json
+ * @returns {Object} Modified config with wrapped servers
+ */
+function wrapServers(config, unwrappedNames, rulesPath) {
+  const modifiedConfig = JSON.parse(JSON.stringify(config.rawConfig));
+
+  // Get reference to mcpServers in the modified config
+  let mcpServers;
+  if (config.format === 'claude-code') {
+    mcpServers = modifiedConfig.projects.mcpServers;
+  } else {
+    mcpServers = modifiedConfig.mcpServers;
+  }
+
+  // Wrap each unwrapped server
+  for (const serverName of unwrappedNames) {
+    const originalConfig = mcpServers[serverName];
+    mcpServers[serverName] = wrapServer(originalConfig, rulesPath);
+  }
+
+  return modifiedConfig;
+}
+
+/**
+ * Discover tools from an MCP server by spawning it and querying tools/list
+ * @param {Object} serverConfig - Server configuration {command, args}
+ * @param {string} serverName - Name of the server
+ * @returns {Promise<string[]>} Array of tool names
+ */
+async function discoverServerTools(serverConfig, serverName) {
+  return new Promise((resolve, reject) => {
+    // Build command
+    const command = serverConfig.command || '';
+    const args = serverConfig.args || [];
+
+    // Spawn the server
+    const child = spawn(command, args, {
+      env: { ...process.env, ...serverConfig.env },
+      stdio: ['pipe', 'pipe', 'pipe']
+    });
+
+    let toolsList = [];
+    let responseBuffer = '';
+    let timeout;
+
+    // Set timeout for discovery (5 seconds)
+    timeout = setTimeout(() => {
+      child.kill();
+      console.error(`  Warning: Discovery timeout for ${serverName}, using service-level defaults`);
+      resolve([]);
+    }, 5000);
+
+    // Send tools/list request
+    const listRequest = JSON.stringify({
+      jsonrpc: '2.0',
+      method: 'tools/list',
+      id: 1
+    }) + '\n';
+
+    child.stdin.write(listRequest);
+
+    // Read response
+    child.stdout.on('data', (data) => {
+      responseBuffer += data.toString();
+
+      // Try to parse JSON-RPC response
+      const lines = responseBuffer.split('\n');
+      for (const line of lines) {
+        if (!line.trim()) continue;
+
+        try {
+          const response = JSON.parse(line);
+          if (response.id === 1 && response.result && response.result.tools) {
+            toolsList = response.result.tools.map(t => t.name);
+            clearTimeout(timeout);
+            child.kill();
+            resolve(toolsList);
+            return;
+          }
+        } catch (e) {
+          // Not valid JSON yet, continue buffering
+        }
+      }
+    });
+
+    child.on('error', (err) => {
+      clearTimeout(timeout);
+      console.error(`  Warning: Failed to discover tools from ${serverName}: ${err.message}`);
+      resolve([]);
+    });
+
+    child.on('close', (code) => {
+      clearTimeout(timeout);
+      if (toolsList.length === 0) {
+        console.error(`  Warning: No tools discovered from ${serverName}, using service-level defaults`);
+      }
+      resolve(toolsList);
+    });
+  });
+}
+
+/**
+ * Generate default rules for a service with safe defaults
+ * @param {string} serviceName - Service name
+ * @param {string[]} tools - Array of tool names
+ * @returns {Object[]} Array of rule objects
+ */
+function generateDefaultRules(serviceName, tools) {
+  const rules = [];
+  const safeDefaults = {
+    read: 'allow',
+    write: 'allow',
+    delete: 'deny',
+    execute: 'deny',
+    admin: 'deny'
+  };
+
+  if (tools.length === 0) {
+    // No tools discovered, create service-level rules
+    for (const [operation, permission] of Object.entries(safeDefaults)) {
+      if (permission === 'deny') {
+        rules.push({
+          service: serviceName,
+          operations: [operation],
+          permission: permission,
+          reason: `${operation.charAt(0).toUpperCase() + operation.slice(1)} operations denied by default for safety`
+        });
+      }
+    }
+  } else {
+    // Create rules based on discovered tools
+    const toolsByOperation = { read: [], write: [], delete: [], execute: [], admin: [] };
+
+    tools.forEach(toolName => {
+      const operation = detectOperation(toolName);
+      if (toolsByOperation[operation]) {
+        toolsByOperation[operation].push(toolName);
+      }
+    });
+
+    // Create rules for each operation type that has tools
+    for (const [operation, permission] of Object.entries(safeDefaults)) {
+      if (toolsByOperation[operation].length > 0) {
+        const rule = {
+          service: serviceName,
+          operations: [operation],
+          permission: permission
+        };
+
+        if (permission === 'deny') {
+          rule.reason = `${operation.charAt(0).toUpperCase() + operation.slice(1)} operations denied by default for safety`;
+        }
+
+        rules.push(rule);
+      }
+    }
+  }
+
+  return rules;
+}
+
+/**
+ * Ensure rules file exists, generate with safe defaults if needed
+ * @param {string} rulesPath - Path to rules.json
+ * @param {Object} mcpServers - MCP servers configuration
+ * @returns {Promise<Object>} Loaded or generated rules
+ */
+async function ensureRulesExist(rulesPath, mcpServers) {
+  // Ensure directory exists
+  const rulesDir = dirname(rulesPath);
+  if (!existsSync(rulesDir)) {
+    mkdirSync(rulesDir, { recursive: true });
+  }
+
+  // Check if rules file exists
+  if (existsSync(rulesPath)) {
+    // Load existing rules and check for new servers
+    const existingRules = loadAndValidateRules(rulesPath);
+    const existingServices = new Set(existingRules.rules.map(r => r.service));
+
+    // Find new servers not in rules
+    const allServers = Object.keys(mcpServers);
+    const newServers = allServers.filter(serverName => !existingServices.has(serverName));
+
+    if (newServers.length === 0) {
+      console.log(`Using rules from: ${rulesPath}`);
+      return existingRules;
+    }
+
+    // Discover and add rules for new servers
+    console.log(`\nDiscovered ${newServers.length} new server(s) not in rules:`);
+    newServers.forEach(name => console.log(`  - ${name}`));
+    console.log('\nGenerating safe defaults for new servers...');
+
+    const newRules = [];
+    for (const serverName of newServers) {
+      const serverConfig = mcpServers[serverName];
+      console.log(`  Discovering tools from ${serverName}...`);
+
+      const tools = await discoverServerTools(serverConfig, serverName);
+      const rules = generateDefaultRules(serverName, tools);
+      newRules.push(...rules);
+
+      console.log(`  ✓ Added ${rules.length} rule(s) for ${serverName}`);
+    }
+
+    // Merge with existing rules
+    const mergedRules = {
+      _comment: 'Auto-generated governance rules. Edit as needed.',
+      _location: rulesPath,
+      rules: [...existingRules.rules, ...newRules]
+    };
+
+    // Save merged rules
+    writeFileSync(rulesPath, JSON.stringify(mergedRules, null, 2) + '\n');
+    console.log(`\n✓ Updated rules file: ${rulesPath}`);
+    console.log('\nTo customize governance rules, edit: ' + rulesPath);
+
+    return mergedRules;
+  } else {
+    // First run - generate rules for all servers
+    console.log('\nNo rules file found - generating with safe defaults...');
+
+    const allRules = [];
+    const serverNames = Object.keys(mcpServers);
+
+    if (serverNames.length === 0) {
+      console.log('No MCP servers found in config');
+      const emptyRules = {
+        _comment: 'Auto-generated governance rules. Add servers and run again.',
+        _location: rulesPath,
+        rules: []
+      };
+      writeFileSync(rulesPath, JSON.stringify(emptyRules, null, 2) + '\n');
+      return emptyRules;
+    }
+
+    console.log(`Discovering tools from ${serverNames.length} server(s)...`);
+
+    for (const serverName of serverNames) {
+      const serverConfig = mcpServers[serverName];
+      console.log(`  Discovering ${serverName}...`);
+
+      const tools = await discoverServerTools(serverConfig, serverName);
+      const rules = generateDefaultRules(serverName, tools);
+      allRules.push(...rules);
+
+      if (tools.length > 0) {
+        console.log(`  ✓ Found ${tools.length} tool(s), generated ${rules.length} rule(s)`);
+      } else {
+        console.log(`  ✓ Generated ${rules.length} service-level rule(s)`);
+      }
+    }
+
+    // Create rules file
+    const rulesData = {
+      _comment: 'Auto-generated governance rules. Edit as needed.',
+      _location: rulesPath,
+      rules: allRules
+    };
+
+    writeFileSync(rulesPath, JSON.stringify(rulesData, null, 2) + '\n');
+    console.log(`\n✓ Generated rules file: ${rulesPath}`);
+
+    // Show summary
+    const deniedOps = allRules.filter(r => r.permission === 'deny');
+    const allowedOps = allRules.filter(r => r.permission === 'allow');
+    console.log(`\nSafe defaults applied:`);
+    console.log(`  ✓ Allow: ${allowedOps.map(r => r.operations).flat().join(', ')}`);
+    console.log(`  ✗ Deny: ${deniedOps.map(r => r.operations).flat().join(', ')}`);
+    console.log('\nTo customize governance rules, edit: ' + rulesPath);
+
+    return rulesData;
+  }
+}
+
+/**
+ * Main entry point
+ */
+async function main() {
+  const args = parseCliArgs();
+
+  if (args.help) {
+    showUsage();
+  }
+
+  validateArgs(args);
+
+  // Load config file
+  let config;
+  try {
+    config = loadConfig(args.config);
+    console.log(`Loaded config in ${config.format} format`);
+    console.log(`Found ${Object.keys(config.mcpServers).length} MCP servers`);
+  } catch (error) {
+    console.error(`Error loading config: ${error.message}`);
+    process.exit(1);
+  }
+
+  // Determine rules path (use provided or default to ~/.mcp-gov/rules.json)
+  const rulesPath = args.rules || join(homedir(), '.mcp-gov', 'rules.json');
+
+  // Ensure rules file exists (generate if needed with delta approach)
+  let rules;
+  try {
+    rules = await ensureRulesExist(rulesPath, config.mcpServers);
+  } catch (error) {
+    console.error(`Error with rules: ${error.message}`);
+    process.exit(1);
+  }
+
+  // Detect unwrapped servers
+  const { wrapped, unwrapped } = detectUnwrappedServers(config.mcpServers);
+
+  const totalServers = wrapped.length + unwrapped.length;
+
+  if (totalServers === 0) {
+    console.log('No servers found in config');
+  } else {
+    console.log(`\nServer status:`);
+    console.log(`  Total: ${totalServers}`);
+    console.log(`  Already wrapped: ${wrapped.length}`);
+    console.log(`  Need wrapping: ${unwrapped.length}`);
+
+    if (wrapped.length > 0) {
+      console.log(`\nAlready wrapped servers:`);
+      wrapped.forEach(name => console.log(`  - ${name}`));
+    }
+
+    if (unwrapped.length > 0) {
+      console.log(`\nServers to wrap:`);
+      unwrapped.forEach(name => console.log(`  - ${name}`));
+    } else {
+      console.log(`\nAll servers already wrapped, no action needed`);
+    }
+  }
+
+  // Wrap servers if needed
+  if (unwrapped.length > 0) {
+    console.log(`\nWrapping ${unwrapped.length} server(s)...`);
+
+    // Create backup before modifying
+    try {
+      const backupPath = createBackup(args.config);
+      console.log(`✓ Created backup: ${backupPath}`);
+    } catch (error) {
+      console.error(`Error creating backup: ${error.message}`);
+      process.exit(1);
+    }
+
+    // Get absolute path for rules
+    const absoluteRulesPath = resolve(rulesPath);
+
+    // Wrap servers
+    const wrappedConfig = wrapServers(config, unwrapped, absoluteRulesPath);
+
+    // Write updated config
+    try {
+      writeFileSync(args.config, JSON.stringify(wrappedConfig, null, 2) + '\n');
+      console.log(`✓ Updated config file: ${args.config}`);
+    } catch (error) {
+      console.error(`Error writing config file: ${error.message}`);
+      process.exit(1);
+    }
+  }
+
+  // Execute tool command
+  console.log(`\nExecuting tool command: ${args.tool}`);
+  try {
+    const { stdout, stderr } = await execAsync(args.tool, {
+      shell: true,
+      encoding: 'utf8'
+    });
+
+    if (stdout) {
+      console.log(stdout);
+    }
+    if (stderr) {
+      console.error(stderr);
+    }
+  } catch (error) {
+    // exec throws on non-zero exit codes, but we still want to show output
+    if (error.stdout) {
+      console.log(error.stdout);
+    }
+    if (error.stderr) {
+      console.error(error.stderr);
+    }
+    console.error(`\nTool command exited with code ${error.code || 'unknown'}`);
+    process.exit(error.code || 1);
+  }
+}
+
+main().catch(error => {
+  console.error(`Fatal error: ${error.message}`);
+  process.exit(1);
+});

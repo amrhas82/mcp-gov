@@ -1,0 +1,57 @@
+{
+  "_comment": "Governance rules for different MCP services",
+
+  "github": {
+    "_comment": "Rules for GitHub MCP server (@anthropic/mcp-server-github)",
+    "read": "allow",
+    "write": "allow",
+    "delete": "deny",
+    "execute": "allow",
+    "admin": "deny"
+  },
+
+  "google": {
+    "_comment": "Rules for Google Drive/Gmail MCP servers",
+    "read": "allow",
+    "write": "allow",
+    "delete": "deny",
+    "execute": "deny",
+    "admin": "deny"
+  },
+
+  "context7": {
+    "_comment": "Rules for Context7 MCP server (Upstash memory)",
+    "read": "allow",
+    "write": "allow",
+    "delete": "deny",
+    "execute": "deny",
+    "admin": "deny"
+  },
+
+  "slack": {
+    "_comment": "Rules for Slack MCP server",
+    "read": "allow",
+    "write": "allow",
+    "delete": "deny",
+    "execute": "deny",
+    "admin": "deny"
+  },
+
+  "filesystem": {
+    "_comment": "Rules for filesystem MCP server",
+    "read": "allow",
+    "write": "allow",
+    "delete": "deny",
+    "execute": "deny",
+    "admin": "deny"
+  },
+
+  "database": {
+    "_comment": "Rules for database MCP servers",
+    "read": "allow",
+    "write": "deny",
+    "delete": "deny",
+    "execute": "deny",
+    "admin": "deny"
+  }
+}
