@@ -759,6 +759,48 @@ describe('mcp-gov-wrap server wrapping logic', () => {
     assert.strictEqual(wrappedServer.env.DEBUG, 'true');
   });
 
+  test('should store original command and args in _original field', async () => {
+    const configPath = join(tmpDir, 'original-config.json');
+    const rulesPath = join(tmpDir, 'rules.json');
+
+    const config = {
+      mcpServers: {
+        'test-server': {
+          command: 'npx',
+          args: ['-y', '@modelcontextprotocol/server-github'],
+          env: {
+            GITHUB_TOKEN: 'ghp_xxx'
+          }
+        }
+      }
+    };
+
+    writeFileSync(configPath, JSON.stringify(config, null, 2));
+    writeFileSync(rulesPath, JSON.stringify({ rules: [] }));
+
+    const result = await runWrapper([
+      '--config', configPath,
+      '--rules', rulesPath,
+      '--tool', 'echo test'
+    ]);
+
+    // Read modified config
+    const modifiedConfig = JSON.parse(readFileSync(configPath, 'utf8'));
+    const wrappedServer = modifiedConfig.mcpServers['test-server'];
+
+    // Should have _original field
+    assert.ok(wrappedServer._original, '_original field should exist');
+    assert.strictEqual(wrappedServer._original.command, 'npx');
+    assert.deepStrictEqual(wrappedServer._original.args, ['-y', '@modelcontextprotocol/server-github']);
+
+    // Should NOT store env in _original (env doesn't change)
+    assert.strictEqual(wrappedServer._original.env, undefined);
+
+    // Env should still be at top level
+    assert.ok(wrappedServer.env);
+    assert.strictEqual(wrappedServer.env.GITHUB_TOKEN, 'ghp_xxx');
+  });
+
   test('should handle servers with no args field', async () => {
     const configPath = join(tmpDir, 'no-args-config.json');
     const rulesPath = join(tmpDir, 'rules.json');

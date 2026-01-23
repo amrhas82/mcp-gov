@@ -1,25 +1,28 @@
 # MCP Governance System
 
-A permission control and audit logging system for Model Context Protocol (MCP) servers. Provides fine-grained governance over tool operations with **automatic rule generation** and structured audit logs.
+A permission control and audit logging system for Model Context Protocol (MCP) servers. Provides fine-grained governance over tool operations with **automatic rule generation**, **wrap/unwrap capabilities**, and structured audit logs.
 
-## Quick Start (3 Steps)
+## Quick Start (2 Steps)
 
 ```bash
 # 1. Install globally
-npm install -g .
+npm install -g mcp-gov
 
-# 2. Add MCP servers with your client's native command
-claude mcp add github --command "npx" --args "-y @modelcontextprotocol/server-github"
-
-# 3. Launch with governance (auto-generates rules!)
-mcp-gov-wrap --config ~/.config/claude/config.json --tool "claude chat"
+# 2. Wrap your MCP servers (auto-generates rules with safe defaults)
+mcp-gov-wrap --config ~/.config/claude/config.json
 ```
 
-That's it! Rules are automatically generated with safe defaults:
+That's it! Rules are automatically generated at `~/.mcp-gov/rules.json` with safe defaults:
 - ✅ **Allow**: read, write operations
 - ❌ **Deny**: delete, admin, execute operations
 
-Edit `~/.mcp-gov/rules.json` to customize. Changes take effect immediately!
+**To unwrap (restore original config):**
+```bash
+mcp-gov-unwrap --config ~/.config/claude/config.json
+```
+
+**To customize rules:**
+Edit `~/.mcp-gov/rules.json` - changes take effect immediately!
 
 ## Features
 
@@ -36,59 +39,55 @@ Edit `~/.mcp-gov/rules.json` to customize. Changes take effect immediately!
 ## Installation
 
 ```bash
-# Clone the repository
+# From npm (recommended)
+npm install -g mcp-gov
+
+# Or from source
 git clone https://github.com/yourusername/mcp-gov.git
 cd mcp-gov
-
-# Install dependencies
 npm install
-
-# Install globally for CLI tools (optional)
-npm install -g .
+sudo npm link
 ```
 
-## Auto-Wrap Setup (Recommended)
+**Verify installation:**
+```bash
+mcp-gov-wrap --help
+mcp-gov-unwrap --help
+mcp-gov-proxy --help
+```
 
-The easiest way to add governance to existing MCP servers is using the auto-wrap CLI tools with **automatic rule generation**.
+## The 3 Commands
 
-### 1. Install CLI Tools
+### 1. `mcp-gov-wrap` - Wrap MCP Servers
+
+Automatically wraps MCP servers with governance proxy and generates rules.
 
 ```bash
-# Install globally
-npm install -g .
+# Minimal (uses all defaults)
+mcp-gov-wrap --config ~/.config/claude/config.json
 
-# Verify installation
-which mcp-gov-proxy
-which mcp-gov-wrap
+# With custom rules file
+mcp-gov-wrap --config ~/.config/claude/config.json --rules ~/my-rules.json
+
+# Wrap and launch a tool after
+mcp-gov-wrap --config ~/.config/claude/config.json --tool "claude chat"
 ```
 
-### 2. Add MCP Servers (Native Command)
+**What it does:**
+- ✅ Auto-detects unwrapped MCP servers in your config
+- ✅ Wraps them with `mcp-gov-proxy`
+- ✅ Stores original config in `_original` field (for unwrapping later)
+- ✅ Auto-generates rules at `~/.mcp-gov/rules.json` if missing
+- ✅ Creates timestamped backup before modifying config
+- ✅ Supports both flat and Claude Code config formats
 
-Use your MCP client's native command to add servers:
-
-```bash
-# Example with Claude Code
-claude mcp add github --command "npx" --args "-y @modelcontextprotocol/server-github"
-
-# Example with Droid
-droid mcp add github --command "npx" --args "-y @modelcontextprotocol/server-github"
+**First run output:**
 ```
+Loaded config in flat format
+Found 4 MCP servers
 
-### 3. Wrap Servers and Launch (Auto-generates Rules!)
-
-Use `mcp-gov-wrap` - **no rules file needed**, it auto-generates with safe defaults:
-
-```bash
-# Wrap servers and launch (rules auto-generated if missing)
-mcp-gov-wrap \
-  --config ~/.config/claude/config.json \
-  --tool "claude chat"
-```
-
-**What happens on first run:**
-```
 No rules file found - generating with safe defaults...
-Discovering tools from 1 server(s)...
+Discovering tools from 4 server(s)...
   Discovering github...
   ✓ Found 15 tool(s), generated 5 rule(s)
 
@@ -98,66 +97,208 @@ Safe defaults applied:
   ✓ Allow: read, write
   ✗ Deny: delete, admin, execute
 
+Server status:
+  Total: 4
+  Already wrapped: 0
+  Need wrapping: 4
+
+Wrapping 4 server(s)...
+✓ Created backup: ~/.config/claude/config.json.backup-20260123-123456
+✓ Updated config file: ~/.config/claude/config.json
+
+✓ Wrapping complete!
+
 To customize governance rules, edit: ~/.mcp-gov/rules.json
 ```
 
-The wrapper automatically:
-- **Discovers tools** from each MCP server
-- **Generates rules** with safe defaults (allow read/write, deny delete/admin/execute)
-- Saves rules to `~/.mcp-gov/rules.json`
-- Wraps servers with governance
-- Creates timestamped backups
+### 2. `mcp-gov-unwrap` - Restore Original Config
 
-### 4. Customize Rules (Optional)
-
-Edit the auto-generated rules to customize permissions:
+Unwraps MCP servers by restoring the original configuration from `_original` field.
 
 ```bash
-vim ~/.mcp-gov/rules.json
+# Minimal (just unwrap)
+mcp-gov-unwrap --config ~/.config/claude/config.json
+
+# Unwrap and launch a tool after
+mcp-gov-unwrap --config ~/.config/claude/config.json --tool "claude chat"
 ```
 
-Example:
+**What it does:**
+- ✅ Auto-detects wrapped MCP servers (servers with `_original` field)
+- ✅ Restores original `command` and `args` from `_original`
+- ✅ Removes `_original` field and proxy wrapper
+- ✅ Preserves `env` variables unchanged
+- ✅ Creates timestamped backup before modifying config
+- ✅ Idempotent (safe to run multiple times)
+
+**Output:**
+```
+Loaded config in flat format
+Found 4 MCP servers
+
+Server status:
+  Total: 4
+  Wrapped (can unwrap): 4
+  Already unwrapped: 0
+
+Servers to unwrap:
+  - github
+  - filesystem
+  - memory
+
+Unwrapping 4 server(s)...
+✓ Created backup: ~/.config/claude/config.json.backup-20260123-213121
+✓ Updated config file: ~/.config/claude/config.json
+
+✓ Unwrapping complete!
+```
+
+**Use cases:**
+- Test governance on/off quickly
+- Temporarily disable governance for debugging
+- Restore original config if something goes wrong
+
+### 3. `mcp-gov-proxy` - Low-Level Proxy (Advanced)
+
+The underlying proxy used by `mcp-gov-wrap`. Normally you don't call this directly.
+
+```bash
+mcp-gov-proxy \
+  --target "npx -y @modelcontextprotocol/server-github" \
+  --rules ~/.mcp-gov/rules.json
+```
+
+**What it does:**
+- Intercepts JSON-RPC `tools/call` messages
+- Checks permissions against rules
+- Allows or denies operations
+- Logs all operations to stderr (structured JSON)
+
+This command is automatically invoked by `mcp-gov-wrap` - you typically don't need to use it directly.
+
+## Rules Configuration
+
+### Location
+
+Rules are stored at: **`~/.mcp-gov/rules.json`**
+
+This file is **auto-generated** on first run with safe defaults. You can edit it to customize permissions.
+
+### Format
+
 ```json
 {
   "_comment": "Auto-generated governance rules. Edit as needed.",
+  "_location": "/home/user/.mcp-gov/rules.json",
   "rules": [
     {
       "service": "github",
       "operations": ["read"],
+      "permission": "allow",
+      "reason": "Allow read operations (optional)"
+    },
+    {
+      "service": "github",
+      "operations": ["write"],
       "permission": "allow"
     },
     {
       "service": "github",
-      "operations": ["delete", "admin"],
+      "operations": ["delete"],
       "permission": "deny",
-      "reason": "Destructive operations require manual approval"
+      "reason": "Delete operations denied by default for safety"
     }
   ]
 }
 ```
 
-Changes take effect immediately - no restart needed!
+### Fields
 
-### 5. Create an Alias (Recommended)
+- **`service`** - MCP server name (matches config key)
+- **`operations`** - Array of operation types: `read`, `write`, `delete`, `execute`, `admin`
+- **`permission`** - `allow` or `deny`
+- **`reason`** (optional) - Human-readable explanation
+
+### Operation Types
+
+The system automatically classifies 160+ keywords into 5 operation types:
+
+| Type | Examples | Default |
+|------|----------|---------|
+| **read** | get, list, search, query, fetch | ✅ Allow |
+| **write** | create, update, modify, save, add | ✅ Allow |
+| **delete** | delete, remove, drop, purge, destroy | ❌ Deny |
+| **execute** | execute, run, eval, invoke, trigger | ❌ Deny |
+| **admin** | admin, sudo, grant, revoke, configure | ❌ Deny |
+
+### Editing Rules
 
 ```bash
-# Add to ~/.bashrc or ~/.zshrc
-alias claude-gov='mcp-gov-wrap --config ~/.config/claude/config.json --tool "claude chat"'
+# Edit rules file
+vim ~/.mcp-gov/rules.json
 
-# Then just run:
-claude-gov
+# Changes take effect immediately - no restart needed!
 ```
 
-### 6. Adding New Servers (Delta Approach)
+### Example: Allow Deletes for Specific Service
 
-When you add a new MCP server, the wrapper **automatically detects it** and adds rules:
+```json
+{
+  "rules": [
+    {
+      "service": "github",
+      "operations": ["delete"],
+      "permission": "allow",
+      "reason": "Trusted service - allow deletes"
+    }
+  ]
+}
+```
+
+### Example: Deny All Writes
+
+```json
+{
+  "rules": [
+    {
+      "service": "github",
+      "operations": ["write"],
+      "permission": "deny",
+      "reason": "Read-only mode"
+    }
+  ]
+}
+```
+
+## Complete Workflow
 
 ```bash
-# Add a new server
+# 1. Install
+npm install -g mcp-gov
+
+# 2. Wrap servers (auto-generates rules)
+mcp-gov-wrap --config ~/.config/claude/config.json
+
+# 3. (Optional) Customize rules
+vim ~/.mcp-gov/rules.json
+
+# 4. Use your MCP client normally
+claude chat
+
+# 5. (Optional) Unwrap to restore original config
+mcp-gov-unwrap --config ~/.config/claude/config.json
+```
+
+## Adding New Servers (Delta Approach)
+
+When you add a new MCP server, just run `mcp-gov-wrap` again - it **automatically detects** new servers and adds rules:
+
+```bash
+# 1. Add a new server (using your client's native command)
 claude mcp add slack --command "npx" --args "-y @modelcontextprotocol/server-slack"
 
-# Run wrapper - it detects the new server
-claude-gov
+# 2. Run wrap again - detects the new server
+mcp-gov-wrap --config ~/.config/claude/config.json
 ```
 
 **What happens:**
@@ -173,36 +314,13 @@ Generating safe defaults for new servers...
 Your existing github rules are preserved!
 ```
 
-The wrapper uses a **smart delta approach**:
-- Detects servers not in `rules.json`
-- Adds rules **only for new servers**
-- **Preserves your customizations** to existing rules
-- Never overwrites your manual edits
+**Smart delta approach:**
+- ✅ Detects servers not in `rules.json`
+- ✅ Adds rules **only for new servers**
+- ✅ **Preserves your customizations** to existing rules
+- ✅ Never overwrites manual edits
 
-See [examples/auto-wrap-example.md](examples/auto-wrap-example.md) for a complete walkthrough.
-
-## Usage
-
-### Adding New Servers
-
-When you want to add a new MCP server, use your client's native command:
-
-```bash
-# Add server with native command
-claude mcp add my-server --command "node" --args "/path/to/server.js"
-
-# Launch with wrapper - automatically discovers and adds governance
-mcp-gov-wrap \
-  --config ~/.config/claude/config.json \
-  --tool "claude chat"
-```
-
-The wrapper:
-1. Detects the new server
-2. Discovers its tools automatically
-3. Generates rules with safe defaults
-4. Adds rules only for the new server (preserves existing rules)
-5. Wraps the server with governance
+## Usage Examples
 
 ### Viewing Audit Logs
 
@@ -255,16 +373,22 @@ cat ~/.config/claude/config.json | jq '.projects.default.mcpServers'
 
 Wrapped servers will have `"command": "mcp-gov-proxy"` instead of their original command.
 
-### Restoring from Backup
+### Restoring Original Config
 
-If you need to restore your config:
+**Easiest way - use unwrap:**
+
+```bash
+mcp-gov-unwrap --config ~/.config/claude/config.json
+```
+
+**Or restore from backup manually:**
 
 ```bash
 # List available backups
-ls -lt ~/.config/claude/*.backup.* | head -5
+ls -lt ~/.config/claude/*.backup-* | head -5
 
 # Restore from a backup
-cp ~/.config/claude/config.json.backup.20260123-143022 ~/.config/claude/config.json
+cp ~/.config/claude/config.json.backup-20260123-143022 ~/.config/claude/config.json
 ```
 
 ### Direct Proxy Usage (Advanced)

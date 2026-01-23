@@ -55,12 +55,12 @@ function parseCliArgs() {
  */
 function showUsage() {
   console.log(`
-Usage: mcp-gov-wrap --config <config.json> [--rules <rules.json>] --tool <command>
+Usage: mcp-gov-wrap --config <config.json> [--rules <rules.json>] [--tool <command>]
 
 Options:
   --config, -c    Path to MCP config file (e.g., ~/.config/claude/config.json)
   --rules, -r     Path to governance rules file (optional, defaults to ~/.mcp-gov/rules.json)
-  --tool, -t      Tool command to execute after wrapping (e.g., "claude chat")
+  --tool, -t      Tool command to execute after wrapping (optional, e.g., "claude chat")
   --help, -h      Show this help message
 
 Description:
@@ -71,14 +71,14 @@ Description:
   Supports both Claude Code format (projects.mcpServers) and flat format (mcpServers).
 
 Examples:
-  # Wrap servers with auto-generated rules and launch Claude Code
+  # Wrap servers (minimal - uses defaults)
+  mcp-gov-wrap --config ~/.config/claude/config.json
+
+  # Wrap servers and launch Claude Code
   mcp-gov-wrap --config ~/.config/claude/config.json --tool "claude chat"
 
   # Wrap servers with custom rules
-  mcp-gov-wrap --config ~/.config/claude/config.json --rules ~/.mcp-gov/rules.json --tool "claude chat"
-
-  # Check what would be wrapped
-  mcp-gov-wrap --config ~/.config/claude/config.json --tool "echo Done"
+  mcp-gov-wrap --config ~/.config/claude/config.json --rules ~/custom-rules.json
 `);
   process.exit(0);
 }
@@ -95,10 +95,7 @@ function validateArgs(args) {
   }
 
   // --rules is now optional, will default to ~/.mcp-gov/rules.json
-
-  if (!args.tool) {
-    errors.push('--tool argument is required');
-  }
+  // --tool is now optional
 
   if (errors.length > 0) {
     console.error('Error: Missing required arguments\n');
@@ -111,7 +108,7 @@ function validateArgs(args) {
 /**
  * Load and parse config file with format detection
  * @param {string} configPath - Path to config.json
- * @returns {{ mcpServers: Object, format: string }} Config data and detected format
+ * @returns {{ allMcpServers: Array<{path: string, servers: Object}>, format: string, rawConfig: Object }} Config data and detected format
  */
 function loadConfig(configPath) {
   // Check if file exists
@@ -131,23 +128,35 @@ function loadConfig(configPath) {
     throw new Error(`Failed to read config file: ${error.message}`);
   }
 
-  // Detect format and extract mcpServers
-  let mcpServers;
+  // Detect format and extract ALL mcpServers sections
+  let allMcpServers = [];
   let format;
 
-  if (configData.projects && configData.projects.mcpServers) {
-    // Claude Code format: { projects: { mcpServers: {...} } }
-    mcpServers = configData.projects.mcpServers;
-    format = 'claude-code';
+  if (configData.projects && typeof configData.projects === 'object') {
+    // Multi-project format: { projects: { "/path1": { mcpServers: {...} }, "/path2": { mcpServers: {...} } } }
+    format = 'multi-project';
+    for (const [projectPath, projectConfig] of Object.entries(configData.projects)) {
+      if (projectConfig.mcpServers && typeof projectConfig.mcpServers === 'object') {
+        allMcpServers.push({
+          path: projectPath,
+          servers: projectConfig.mcpServers
+        });
+      }
+    }
   } else if (configData.mcpServers) {
     // Flat format: { mcpServers: {...} }
-    mcpServers = configData.mcpServers;
     format = 'flat';
-  } else {
-    throw new Error('mcpServers not found in config. Config must contain "mcpServers" (flat format) or "projects.mcpServers" (Claude Code format)');
+    allMcpServers.push({
+      path: 'root',
+      servers: configData.mcpServers
+    });
   }
 
-  return { mcpServers, format, rawConfig: configData };
+  if (allMcpServers.length === 0) {
+    throw new Error('No mcpServers found in config. Config must contain "mcpServers" (flat) or "projects[*].mcpServers" (multi-project)');
+  }
+
+  return { allMcpServers, format, rawConfig: configData };
 }
 
 /**
@@ -255,7 +264,11 @@ function wrapServer(serverConfig, rulesPath) {
     args: [
       '--target', targetCommand,
       '--rules', rulesPath
-    ]
+    ],
+    _original: {
+      command: serverConfig.command,
+      args: serverConfig.args || []
+    }
   };
 
   // Preserve environment variables if they exist
@@ -587,7 +600,16 @@ async function main() {
   try {
     config = loadConfig(args.config);
     console.log(`Loaded config in ${config.format} format`);
-    console.log(`Found ${Object.keys(config.mcpServers).length} MCP servers`);
+
+    // Count total servers across all projects
+    const totalServersCount = config.allMcpServers.reduce((sum, item) =>
+      sum + Object.keys(item.servers).length, 0);
+
+    if (config.format === 'multi-project') {
+      console.log(`Found ${config.allMcpServers.length} project(s) with ${totalServersCount} total MCP servers`);
+    } else {
+      console.log(`Found ${totalServersCount} MCP servers`);
+    }
   } catch (error) {
     console.error(`Error loading config: ${error.message}`);
     process.exit(1);
@@ -596,44 +618,69 @@ async function main() {
   // Determine rules path (use provided or default to ~/.mcp-gov/rules.json)
   const rulesPath = args.rules || join(homedir(), '.mcp-gov', 'rules.json');
 
+  // Collect all servers from all projects for rules generation
+  const allServers = {};
+  for (const { servers } of config.allMcpServers) {
+    Object.assign(allServers, servers);
+  }
+
   // Ensure rules file exists (generate if needed with delta approach)
   let rules;
   try {
-    rules = await ensureRulesExist(rulesPath, config.mcpServers);
+    rules = await ensureRulesExist(rulesPath, allServers);
   } catch (error) {
     console.error(`Error with rules: ${error.message}`);
     process.exit(1);
   }
 
-  // Detect unwrapped servers
-  const { wrapped, unwrapped } = detectUnwrappedServers(config.mcpServers);
+  // Detect unwrapped servers across ALL projects
+  let allWrapped = [];
+  let allUnwrapped = [];
 
-  const totalServers = wrapped.length + unwrapped.length;
+  for (const { path: projectPath, servers } of config.allMcpServers) {
+    const { wrapped, unwrapped } = detectUnwrappedServers(servers);
+    allWrapped.push(...wrapped.map(name => ({ project: projectPath, name })));
+    allUnwrapped.push(...unwrapped.map(name => ({ project: projectPath, name })));
+  }
+
+  const totalServers = allWrapped.length + allUnwrapped.length;
 
   if (totalServers === 0) {
     console.log('No servers found in config');
   } else {
-    console.log(`\nServer status:`);
+    console.log(`\nServer status (across all projects):`);
     console.log(`  Total: ${totalServers}`);
-    console.log(`  Already wrapped: ${wrapped.length}`);
-    console.log(`  Need wrapping: ${unwrapped.length}`);
+    console.log(`  Already wrapped: ${allWrapped.length}`);
+    console.log(`  Need wrapping: ${allUnwrapped.length}`);
 
-    if (wrapped.length > 0) {
+    if (allWrapped.length > 0) {
       console.log(`\nAlready wrapped servers:`);
-      wrapped.forEach(name => console.log(`  - ${name}`));
+      allWrapped.forEach(({ project, name }) => {
+        if (config.format === 'multi-project') {
+          console.log(`  - ${name} (${project})`);
+        } else {
+          console.log(`  - ${name}`);
+        }
+      });
     }
 
-    if (unwrapped.length > 0) {
+    if (allUnwrapped.length > 0) {
       console.log(`\nServers to wrap:`);
-      unwrapped.forEach(name => console.log(`  - ${name}`));
+      allUnwrapped.forEach(({ project, name }) => {
+        if (config.format === 'multi-project') {
+          console.log(`  - ${name} (${project})`);
+        } else {
+          console.log(`  - ${name}`);
+        }
+      });
     } else {
       console.log(`\nAll servers already wrapped, no action needed`);
     }
   }
 
   // Wrap servers if needed
-  if (unwrapped.length > 0) {
-    console.log(`\nWrapping ${unwrapped.length} server(s)...`);
+  if (allUnwrapped.length > 0) {
+    console.log(`\nWrapping ${allUnwrapped.length} server(s)...`);
 
     // Create backup before modifying
     try {
@@ -647,12 +694,32 @@ async function main() {
     // Get absolute path for rules
     const absoluteRulesPath = resolve(rulesPath);
 
-    // Wrap servers
-    const wrappedConfig = wrapServers(config, unwrapped, absoluteRulesPath);
+    // Wrap servers in each project
+    const modifiedConfig = JSON.parse(JSON.stringify(config.rawConfig));
+
+    for (const { path: projectPath, servers } of config.allMcpServers) {
+      const { unwrapped } = detectUnwrappedServers(servers);
+
+      if (unwrapped.length > 0) {
+        // Get reference to this project's mcpServers
+        let targetServers;
+        if (config.format === 'multi-project') {
+          targetServers = modifiedConfig.projects[projectPath].mcpServers;
+        } else {
+          targetServers = modifiedConfig.mcpServers;
+        }
+
+        // Wrap unwrapped servers in this project
+        for (const serverName of unwrapped) {
+          const originalConfig = targetServers[serverName];
+          targetServers[serverName] = wrapServer(originalConfig, absoluteRulesPath);
+        }
+      }
+    }
 
     // Write updated config
     try {
-      writeFileSync(args.config, JSON.stringify(wrappedConfig, null, 2) + '\n');
+      writeFileSync(args.config, JSON.stringify(modifiedConfig, null, 2) + '\n');
       console.log(`✓ Updated config file: ${args.config}`);
     } catch (error) {
       console.error(`Error writing config file: ${error.message}`);
@@ -660,30 +727,34 @@ async function main() {
     }
   }
 
-  // Execute tool command
-  console.log(`\nExecuting tool command: ${args.tool}`);
-  try {
-    const { stdout, stderr } = await execAsync(args.tool, {
-      shell: true,
-      encoding: 'utf8'
-    });
+  // Execute tool command if provided
+  if (args.tool) {
+    console.log(`\nExecuting tool command: ${args.tool}`);
+    try {
+      const { stdout, stderr } = await execAsync(args.tool, {
+        shell: true,
+        encoding: 'utf8'
+      });
 
-    if (stdout) {
-      console.log(stdout);
+      if (stdout) {
+        console.log(stdout);
+      }
+      if (stderr) {
+        console.error(stderr);
+      }
+    } catch (error) {
+      // exec throws on non-zero exit codes, but we still want to show output
+      if (error.stdout) {
+        console.log(error.stdout);
+      }
+      if (error.stderr) {
+        console.error(error.stderr);
+      }
+      console.error(`\nTool command exited with code ${error.code || 'unknown'}`);
+      process.exit(error.code || 1);
     }
-    if (stderr) {
-      console.error(stderr);
-    }
-  } catch (error) {
-    // exec throws on non-zero exit codes, but we still want to show output
-    if (error.stdout) {
-      console.log(error.stdout);
-    }
-    if (error.stderr) {
-      console.error(error.stderr);
-    }
-    console.error(`\nTool command exited with code ${error.code || 'unknown'}`);
-    process.exit(error.code || 1);
+  } else {
+    console.log(`\n✓ Wrapping complete!`);
   }
 }
 
