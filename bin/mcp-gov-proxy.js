@@ -6,14 +6,19 @@
  */
 
 import { parseArgs } from 'node:util';
-import { readFileSync } from 'node:fs';
+import { readFileSync, appendFileSync, mkdirSync, existsSync } from 'node:fs';
 import { spawn } from 'node:child_process';
 import { createInterface } from 'node:readline';
+import { dirname, join } from 'node:path';
+import { homedir } from 'node:os';
 import { extractService, detectOperation } from '../src/operation-detector.js';
+
+// Default audit log path
+const DEFAULT_AUDIT_LOG = join(homedir(), '.mcp-gov', 'audit.log');
 
 /**
  * Parse command line arguments
- * @returns {{ target: string, rules: string, service: string, help: boolean }}
+ * @returns {{ target: string, rules: string, service: string, log: string, help: boolean }}
  */
 function parseCliArgs() {
   try {
@@ -30,6 +35,10 @@ function parseCliArgs() {
         rules: {
           type: 'string',
           short: 'r',
+        },
+        log: {
+          type: 'string',
+          short: 'l',
         },
         help: {
           type: 'boolean',
@@ -51,12 +60,13 @@ function parseCliArgs() {
  */
 function showUsage() {
   console.log(`
-Usage: mcp-gov-proxy [--service <name>] --target <command> --rules <rules.json>
+Usage: mcp-gov-proxy [--service <name>] --target <command> --rules <rules.json> [--log <file>]
 
 Options:
   --service, -s  Service name for rule matching (recommended, falls back to tool name prefix)
   --target, -t   Target MCP server command to wrap (required)
   --rules, -r    Path to rules.json file (required)
+  --log, -l      Path to audit log file (optional, logs to file AND stderr)
   --help, -h     Show this help message
 
 Description:
@@ -68,7 +78,7 @@ Description:
 
 Examples:
   mcp-gov-proxy --service filesystem --target "npx -y @modelcontextprotocol/server-filesystem" --rules rules.json
-  mcp-gov-proxy -s github -t "npx github-mcp" -r ./config/rules.json
+  mcp-gov-proxy -s github -t "npx github-mcp" -r ./config/rules.json -l ~/.mcp-gov/audit.log
 `);
 }
 
@@ -168,8 +178,11 @@ function createErrorResponse(id, message) {
   return JSON.stringify(response);
 }
 
+/** @type {string|null} */
+let auditLogPath = null;
+
 /**
- * Log audit information to stderr
+ * Log audit information to stderr and optionally to file
  * @param {string} toolName - Tool name
  * @param {string} service - Service name
  * @param {string} operation - Operation type
@@ -178,7 +191,19 @@ function createErrorResponse(id, message) {
 function logAudit(toolName, service, operation, allowed) {
   const timestamp = new Date().toISOString();
   const status = allowed ? 'ALLOWED' : 'DENIED';
-  console.error(`[AUDIT] ${timestamp} | ${status} | tool=${toolName} | service=${service} | operation=${operation}`);
+  const logLine = `[AUDIT] ${timestamp} | ${status} | tool=${toolName} | service=${service} | operation=${operation}`;
+
+  // Always log to stderr
+  console.error(logLine);
+
+  // Also log to file if configured
+  if (auditLogPath) {
+    try {
+      appendFileSync(auditLogPath, logLine + '\n');
+    } catch (e) {
+      console.error(`[AUDIT] Warning: Failed to write to log file: ${e.message}`);
+    }
+  }
 }
 
 /**
@@ -186,8 +211,18 @@ function logAudit(toolName, service, operation, allowed) {
  * @param {string} serviceName - Service name for rule matching
  * @param {string} targetCommand - Command to spawn target MCP server
  * @param {string} rulesPath - Path to rules.json file
+ * @param {string} logPath - Path to audit log file
  */
-function startProxy(serviceName, targetCommand, rulesPath) {
+function startProxy(serviceName, targetCommand, rulesPath, logPath) {
+  // Set up audit logging
+  auditLogPath = logPath || DEFAULT_AUDIT_LOG;
+
+  // Ensure log directory exists
+  const logDir = dirname(auditLogPath);
+  if (!existsSync(logDir)) {
+    mkdirSync(logDir, { recursive: true });
+  }
+
   // Load rules file
   const rules = loadRules(rulesPath);
 
@@ -313,7 +348,7 @@ function main() {
     process.exit(1);
   }
 
-  startProxy(args.service, args.target, args.rules);
+  startProxy(args.service, args.target, args.rules, args.log);
 }
 
 main();
