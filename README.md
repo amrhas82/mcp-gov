@@ -172,9 +172,74 @@ See `examples/github/` for a complete working example with:
 - Environment variable management
 - Claude Desktop integration
 
+## Platform Compatibility
+
+mcp-gov is designed to work seamlessly across Linux, macOS, and Windows. The system handles platform-specific path conventions and behaviors automatically.
+
+### Supported Platforms
+
+- **Linux**: Full support with Unix path separators (`/`) and LF line endings
+- **macOS**: Full support including .app bundles, case-sensitive filesystems, and system symlinks
+- **Windows**: Full support with drive letters (`C:\`), UNC paths (`\\server\share`), backslashes, and CRLF line endings
+
+### Path Handling
+
+The proxy and wrapper tools automatically handle platform-specific path formats:
+
+**Linux/macOS:**
+```bash
+# Unix-style paths with forward slashes
+mcp-gov-proxy --target "node server.js" --rules /home/user/rules.json
+mcp-gov-wrap --config ~/.config/claude/config.json --rules ~/.mcp-gov/rules.json --tool "claude chat"
+```
+
+**Windows:**
+```powershell
+# Windows-style paths with backslashes or forward slashes
+mcp-gov-proxy --target "node server.js" --rules C:\Users\user\rules.json
+mcp-gov-wrap --config %USERPROFILE%\.config\claude\config.json --rules %USERPROFILE%\.mcp-gov\rules.json --tool "claude chat"
+```
+
+### Special Considerations
+
+**macOS:**
+- Application bundles (`.app` directories) are handled correctly
+- System symlinks like `/tmp` → `/private/tmp` work transparently
+- Both case-sensitive and case-insensitive APFS filesystems are supported
+
+**Windows:**
+- UNC network paths (`\\server\share\path`) are fully supported
+- Paths with spaces are handled correctly (e.g., `C:\Program Files`)
+- Both forward slashes and backslashes work in paths
+- Drive letters in absolute paths (e.g., `C:\`, `D:\`) are preserved
+
+**Line Endings:**
+- Config files can use either LF (Unix/macOS) or CRLF (Windows) line endings
+- JSON parsing handles both formats automatically
+- Backup files preserve the original line ending format
+
+### Testing
+
+The test suite includes platform-specific test cases for Windows and macOS scenarios, even when run on Linux. To run platform tests:
+
+```bash
+npm run test:platform
+```
+
+These tests verify path handling, line ending compatibility, and platform-specific behaviors without requiring multiple operating systems for development.
+
 ## Development
 
 ```bash
+# Run all tests
+npm test
+
+# Run specific test suites
+npm run test:proxy
+npm run test:wrapper
+npm run test:platform
+npm run test:integration
+
 # Test operation detection
 node -e "import('./src/operation-detector.js').then(m => console.log(m.detectOperation('github_list_repos')))"
 

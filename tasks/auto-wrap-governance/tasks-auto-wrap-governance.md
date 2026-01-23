@@ -136,23 +136,23 @@
     - verify: `npm uninstall -g mcp-gov && npm install -g .` succeeds
   - [x] 4.5 Verify: `npm run test:all` - all tests pass after installation
 
-- [ ] 5.0 Cross-Platform Compatibility
-  - [ ] 5.1 Test proxy on Linux with path separators and line endings
+- [x] 5.0 Cross-Platform Compatibility
+  - [x] 5.1 Test proxy on Linux with path separators and line endings
     - tdd: no
     - verify: All tests pass on Linux
-  - [ ] 5.2 Test wrapper on Linux with Unix-style commands
+  - [x] 5.2 Test wrapper on Linux with Unix-style commands
     - tdd: no
     - verify: Wrapper correctly handles Linux paths
-  - [ ] 5.3 Create test cases for Windows path handling (backslashes, drive letters)
+  - [x] 5.3 Create test cases for Windows path handling (backslashes, drive letters)
     - tdd: yes
     - verify: Unit tests cover Windows path scenarios
-  - [ ] 5.4 Create test cases for macOS-specific behaviors
+  - [x] 5.4 Create test cases for macOS-specific behaviors
     - tdd: yes
     - verify: Unit tests cover macOS scenarios
-  - [ ] 5.5 Document platform-specific considerations in README
+  - [x] 5.5 Document platform-specific considerations in README
     - tdd: no
     - verify: README includes platform section
-  - [ ] 5.6 Verify: Manual test on macOS and Windows (if available) or document testing requirements
+  - [x] 5.6 Verify: Manual test on macOS and Windows (if available) or document testing requirements
 
 - [ ] 6.0 Documentation and Examples
   - [ ] 6.1 Create examples/auto-wrap-example.md with step-by-step walkthrough
