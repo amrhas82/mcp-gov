@@ -13,27 +13,38 @@
 
 A permission control and audit logging system for Model Context Protocol (MCP) servers. Provides fine-grained governance over tool operations with **automatic rule generation**, **wrap/unwrap capabilities**, and structured audit logs.
 
-## Quick Start (2 Steps)
+## Quick Start
 
 ```bash
-# 1. Install globally
+# Install globally
 npm install -g mcp-gov
 
-# 2. Wrap your MCP servers (auto-generates rules with safe defaults)
-mcp-gov-wrap --config ~/.config/claude/config.json
+# Run interactive CLI
+mcp-gov
 ```
 
-That's it! Rules are automatically generated at `~/.mcp-gov/rules.json` with safe defaults:
+```
+███╗   ███╗ ██████╗██████╗      ██████╗  ██████╗ ██╗   ██╗
+████╗ ████║██╔════╝██╔══██╗    ██╔════╝ ██╔═══██╗██║   ██║
+██╔████╔██║██║     ██████╔╝    ██║  ███╗██║   ██║██║   ██║
+██║╚██╔╝██║██║     ██╔═══╝     ██║   ██║██║   ██║╚██╗ ██╔╝
+██║ ╚═╝ ██║╚██████╗██║         ╚██████╔╝╚██████╔╝ ╚████╔╝
+╚═╝     ╚═╝ ╚═════╝╚═╝          ╚═════╝  ╚═════╝   ╚═══╝
+                                                    v1.2.5
+
+Select action:
+  1) Wrap MCP servers
+  2) Unwrap MCP servers
+  3) View audit logs
+  4) Edit rules
+  5) Exit
+
+Enter choice [1-5]:
+```
+
+Rules are automatically generated at `~/.mcp-gov/rules.json` with safe defaults:
 - ✅ **Allow**: read, write operations
 - ❌ **Deny**: delete, admin, execute operations
-
-**To unwrap (restore original config):**
-```bash
-mcp-gov-unwrap --config ~/.config/claude/config.json
-```
-
-**To customize rules:**
-Edit `~/.mcp-gov/rules.json` - changes take effect immediately!
 
 ## Features
 
