@@ -1,17 +1,27 @@
-<p align="center">
-<pre>
-███╗   ███╗ ██████╗██████╗      ██████╗  ██████╗ ██╗   ██╗
-████╗ ████║██╔════╝██╔══██╗    ██╔════╝ ██╔═══██╗██║   ██║
-██╔████╔██║██║     ██████╔╝    ██║  ███╗██║   ██║██║   ██║
-██║╚██╔╝██║██║     ██╔═══╝     ██║   ██║██║   ██║╚██╗ ██╔╝
-██║ ╚═╝ ██║╚██████╗██║         ╚██████╔╝╚██████╔╝ ╚████╔╝
-╚═╝     ╚═╝ ╚═════╝╚═╝          ╚═════╝  ╚═════╝   ╚═══╝
-</pre>
-</p>
+<div align="center">
+
+```
+███╗   ███╗  ██████╗ ██████╗     ██████╗  ██████╗ ██╗   ██╗
+████╗ ████║ ██╔════╝ ██╔══██╗   ██╔════╝ ██╔═══██╗██║   ██║
+██╔████╔██║ ██║      ██████╔╝   ██║  ███╗██║   ██║██║   ██║
+██║╚██╔╝██║ ██║      ██╔═══╝    ██║   ██║██║   ██║╚██╗ ██╔╝
+██║ ╚═╝ ██║ ╚██████╗ ██║        ╚██████╔╝╚██████╔╝ ╚████╔╝
+╚═╝     ╚═╝  ╚═════╝ ╚═╝         ╚═════╝  ╚═════╝   ╚═══╝
+```
 
 # MCP Governance System
 
+</div>
+
 Permission control and audit logging for Model Context Protocol (MCP) servers.
+
+## What is MCP-GOV?
+
+MCP-GOV adds a security layer between your AI assistant (Claude, etc.) and MCP tool servers. It:
+
+- **Controls permissions** - Block dangerous operations like delete, execute, admin
+- **Logs everything** - Audit trail of all tool calls with timestamps
+- **Works transparently** - No changes needed to your MCP servers
 
 ## Install
 
@@ -30,13 +40,13 @@ mcp-gov
 ```
 
 ```
-███╗   ███╗ ██████╗██████╗      ██████╗  ██████╗ ██╗   ██╗
-████╗ ████║██╔════╝██╔══██╗    ██╔════╝ ██╔═══██╗██║   ██║
-██╔████╔██║██║     ██████╔╝    ██║  ███╗██║   ██║██║   ██║
-██║╚██╔╝██║██║     ██╔═══╝     ██║   ██║██║   ██║╚██╗ ██╔╝
-██║ ╚═╝ ██║╚██████╗██║         ╚██████╔╝╚██████╔╝ ╚████╔╝
-╚═╝     ╚═╝ ╚═════╝╚═╝          ╚═════╝  ╚═════╝   ╚═══╝
-                                                    v1.2.5
+███╗   ███╗  ██████╗ ██████╗     ██████╗  ██████╗ ██╗   ██╗
+████╗ ████║ ██╔════╝ ██╔══██╗   ██╔════╝ ██╔═══██╗██║   ██║
+██╔████╔██║ ██║      ██████╔╝   ██║  ███╗██║   ██║██║   ██║
+██║╚██╔╝██║ ██║      ██╔═══╝    ██║   ██║██║   ██║╚██╗ ██╔╝
+██║ ╚═╝ ██║ ╚██████╗ ██║        ╚██████╔╝╚██████╔╝ ╚████╔╝
+╚═╝     ╚═╝  ╚═════╝ ╚═╝         ╚═════╝  ╚═════╝   ╚═══╝
+                                                   v1.3.0
 
 Select action:
   1) Wrap MCP servers
@@ -50,17 +60,52 @@ Enter choice [1-5]:
 
 ## How It Works
 
-**Before wrapping:**
 ```
-Claude → MCP Server
+┌─────────────────────────────────────────────────────────────┐
+│                     WITHOUT MCP-GOV                         │
+├─────────────────────────────────────────────────────────────┤
+│                                                             │
+│   Claude ──────────────────────────────► MCP Server         │
+│           (all operations allowed)       (filesystem,       │
+│                                           github, etc.)     │
+│                                                             │
+└─────────────────────────────────────────────────────────────┘
+
+┌─────────────────────────────────────────────────────────────┐
+│                      WITH MCP-GOV                           │
+├─────────────────────────────────────────────────────────────┤
+│                                                             │
+│   Claude ────► mcp-gov-proxy ────► MCP Server               │
+│                     │                                       │
+│                     ├── Check rules.json                    │
+│                     │   ├── read: ✅ allow                  │
+│                     │   ├── write: ✅ allow                 │
+│                     │   ├── delete: ❌ deny                 │
+│                     │   └── admin: ❌ deny                  │
+│                     │                                       │
+│                     └── Log to audit.log                    │
+│                                                             │
+└─────────────────────────────────────────────────────────────┘
 ```
 
-**After wrapping:**
+## Workflow
+
 ```
-Claude → mcp-gov-proxy → MCP Server
-              ↓
-        checks rules
-        logs to audit
+1. Install         npm install -g mcp-gov
+                            │
+                            ▼
+2. Run             mcp-gov
+                            │
+                            ▼
+3. Select          1) Wrap MCP servers
+                            │
+                            ▼
+4. Enter path      ~/.claude.json
+                            │
+                            ▼
+5. Done!           ✓ Servers wrapped
+                   ✓ Rules generated at ~/.mcp-gov/rules.json
+                   ✓ Audit logs at ~/.mcp-gov/logs/
 ```
 
 ## Default Rules

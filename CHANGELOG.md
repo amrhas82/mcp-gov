@@ -2,10 +2,19 @@
 
 All notable changes to mcp-gov will be documented in this file.
 
+## [1.3.1] - 2026-01-24
+
+### Changed
+- Improved README with "What is MCP-GOV?" section
+- Added visual flow diagrams (with/without MCP-GOV)
+- Added workflow steps diagram
+- Fixed ASCII logo alignment
+- Centered logo in README
+
 ## [1.3.0] - 2026-01-24
 
 ### Changed
-- Cleaned up README - reduced from 1200+ lines to ~130 lines
+- Cleaned up README - reduced from 1200+ lines to ~170 lines
 - Focus on interactive CLI usage
 - Added npm and npx install options
 
