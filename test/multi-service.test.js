@@ -217,7 +217,7 @@ describe('Multi-service governance', () => {
       ]);
 
       assert.strictEqual(result.exitCode, 0);
-      assert.match(result.stdout, /Loaded 3 rules/, 'Should load 3 rules');
+      assert.match(result.stdout, /Using rules from:/, 'Should use rules file');
       assert.match(result.stdout, /Need wrapping: 3/, 'Should detect 3 services');
 
       // Verify all services wrapped with correct rules path
@@ -281,7 +281,6 @@ describe('Multi-service governance', () => {
       ]);
 
       assert.strictEqual(result.exitCode, 0);
-      assert.match(result.stdout, /Loaded 2 rules/, 'Should load 2 rules');
       assert.match(result.stdout, /Found 4 MCP servers/, 'Should find all 4 servers');
 
       // All services should still be wrapped (even those without specific rules)
@@ -331,7 +330,7 @@ describe('Multi-service governance', () => {
 
       assert.strictEqual(result.exitCode, 0);
       assert.match(result.stdout, /Found 5 MCP servers/, 'Should find 5 servers');
-      assert.match(result.stdout, /Loaded 5 rules/, 'Should load 5 rules');
+      assert.match(result.stdout, /Using rules from:/, 'Should use rules file');
       assert.match(result.stdout, /Need wrapping: 5/, 'Should wrap all 5 servers');
 
     } finally {

@@ -1,3 +1,12 @@
+```
+███╗   ███╗ ██████╗██████╗      ██████╗  ██████╗ ██╗   ██╗
+████╗ ████║██╔════╝██╔══██╗    ██╔════╝ ██╔═══██╗██║   ██║
+██╔████╔██║██║     ██████╔╝    ██║  ███╗██║   ██║██║   ██║
+██║╚██╔╝██║██║     ██╔═══╝     ██║   ██║██║   ██║╚██╗ ██╔╝
+██║ ╚═╝ ██║╚██████╗██║         ╚██████╔╝╚██████╔╝ ╚████╔╝
+╚═╝     ╚═╝ ╚═════╝╚═╝          ╚═════╝  ╚═════╝   ╚═══╝
+```
+
 # MCP Governance System
 
 A permission control and audit logging system for Model Context Protocol (MCP) servers. Provides fine-grained governance over tool operations with **automatic rule generation**, **wrap/unwrap capabilities**, and structured audit logs.

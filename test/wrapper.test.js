@@ -73,11 +73,22 @@ describe('mcp-gov-wrap CLI argument parsing', () => {
     }
   });
 
-  test('should require --tool argument', async () => {
-    const result = await runWrapper(['--config', 'config.json', '--rules', 'rules.json']);
+  test('should accept optional --tool argument', async () => {
+    // --tool is optional, so running without it should not produce a "--tool required" error
+    // Create temporary config and rules files
+    const tmpDir = join(projectRoot, 'test', 'tmp');
+    if (!existsSync(tmpDir)) {
+      mkdirSync(tmpDir, { recursive: true });
+    }
+    const configPath = join(tmpDir, 'tool-test-config.json');
+    const rulesPath = join(tmpDir, 'tool-test-rules.json');
+    writeFileSync(configPath, JSON.stringify({ mcpServers: {} }));
+    writeFileSync(rulesPath, JSON.stringify({ rules: [] }));
 
-    assert.notStrictEqual(result.exitCode, 0);
-    assert.match(result.stderr, /--tool.*required/i);
+    const result = await runWrapper(['--config', configPath, '--rules', rulesPath]);
+
+    // Should not fail due to missing --tool (it's optional)
+    assert.doesNotMatch(result.stderr, /--tool.*required/i);
   });
 
   test('should accept valid arguments', async () => {
@@ -466,7 +477,7 @@ describe('mcp-gov-wrap config file reading', () => {
     ]);
 
     assert.notStrictEqual(result.exitCode, 0);
-    assert.match(result.stderr, /mcpServers.*not found/i);
+    assert.match(result.stderr, /no mcpServers found|mcpServers.*not found/i);
   });
 
   test('should accept config with empty mcpServers', async () => {

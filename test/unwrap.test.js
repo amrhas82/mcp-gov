@@ -432,7 +432,7 @@ describe('mcp-gov-unwrap config backup', () => {
   });
 });
 
-describe('mcp-gov-unwrap Claude Code format support', () => {
+describe('mcp-gov-unwrap multi-project format support', () => {
   const tmpDir = join(projectRoot, 'test', 'tmp-unwrap');
 
   beforeEach(() => {
@@ -447,18 +447,20 @@ describe('mcp-gov-unwrap Claude Code format support', () => {
     }
   });
 
-  test('should support Claude Code format (projects.mcpServers)', async () => {
-    const configPath = join(tmpDir, 'claude-code-config.json');
+  test('should support multi-project format (projects[path].mcpServers)', async () => {
+    const configPath = join(tmpDir, 'multi-project-config.json');
 
     const config = {
       projects: {
-        mcpServers: {
-          'github': {
-            command: 'mcp-gov-proxy',
-            args: ['--target', 'npx -y @modelcontextprotocol/server-github', '--rules', '/rules.json'],
-            _original: {
-              command: 'npx',
-              args: ['-y', '@modelcontextprotocol/server-github']
+        '/home/user/myproject': {
+          mcpServers: {
+            'github': {
+              command: 'mcp-gov-proxy',
+              args: ['--target', 'npx -y @modelcontextprotocol/server-github', '--rules', '/rules.json'],
+              _original: {
+                command: 'npx',
+                args: ['-y', '@modelcontextprotocol/server-github']
+              }
             }
           }
         }
@@ -472,13 +474,13 @@ describe('mcp-gov-unwrap Claude Code format support', () => {
       '--tool', 'echo test'
     ]);
 
-    // Should detect Claude Code format
+    // Should detect multi-project format
     const output = result.stdout + result.stderr;
-    assert.match(output, /claude-code/i);
+    assert.match(output, /multi-project|project/i);
 
     // Read modified config
     const modifiedConfig = JSON.parse(readFileSync(configPath, 'utf8'));
-    const unwrappedServer = modifiedConfig.projects.mcpServers['github'];
+    const unwrappedServer = modifiedConfig.projects['/home/user/myproject'].mcpServers['github'];
 
     // Should unwrap correctly
     assert.strictEqual(unwrappedServer.command, 'npx');

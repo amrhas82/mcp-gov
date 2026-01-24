@@ -191,7 +191,8 @@ let auditLogPath = null;
 function logAudit(toolName, service, operation, allowed) {
   const timestamp = new Date().toISOString();
   const status = allowed ? 'ALLOWED' : 'DENIED';
-  const logLine = `[AUDIT] ${timestamp} | ${status} | tool=${toolName} | service=${service} | operation=${operation}`;
+  const projectPath = process.cwd();
+  const logLine = `[AUDIT] ${timestamp} | ${status} | tool=${toolName} | service=${service} | operation=${operation} | project=${projectPath}`;
 
   // Always log to stderr
   console.error(logLine);
